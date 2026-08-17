@@ -1,0 +1,189 @@
+package com.leadspotnic.web;
+
+import com.leadspotnic.model.ClusterExtraction;
+import com.leadspotnic.model.ConsolidatedSummary;
+import com.leadspotnic.cluster.Embedder;
+import com.leadspotnic.summarize.KnowledgeBase;
+import com.leadspotnic.agent.PostIndex;
+import com.leadspotnic.agent.PostStore;
+import com.leadspotnic.agent.TopicIndex;
+import com.leadspotnic.agent.Agent;
+import com.leadspotnic.persistence.AgentDatabase;
+import com.leadspotnic.persistence.DatabaseRun;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.javalin.Javalin;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Step 4.5: the web server. Loads the knowledge base once at startup, builds the search
+ * index and the agent, then serves:
+ *
+ *   GET  /status  — is the dataset processed? (the frontend's data-source indicator)
+ *   POST /chat     — { "query": "..." } -> { "answer": "...", "sources": [...] }
+ *
+ * Run it after the pipeline has produced knowledge-base.json:
+ *   mvn -q compile exec:java -Dexec.mainClass=com.leadspotnic.Server
+ */
+public class Server {
+
+    private static final int PORT = 7070;
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    /** The default export, used when neither an argument nor POSTS_CSV overrides it. */
+    private static final String DEFAULT_POSTS_CSV = "data/lebanone posts - posts_text_6000.csv";
+
+    public static void main(String[] args) throws Exception {
+        Optional<DatabaseRun> databaseRun = AgentDatabase.tryLoadPreferredRun();
+
+        // The posts CSV is configuration, not code: a command-line argument wins, else the
+        // POSTS_CSV environment variable, then the selected run's recorded path, then the default.
+        String csvPath = postsCsvPath(args, databaseRun.map(DatabaseRun::csvPath).orElse(null));
+
+        // Prefer a completed database run; retain the existing local-file path as fallback.
+        ConsolidatedSummary kb = databaseRun
+                .map(DatabaseRun::knowledgeBase)
+                .orElseGet(Server::loadLocalKnowledgeBase);
+        TopicIndex index = new TopicIndex(kb, new Embedder());   // embeds the topic summaries
+
+        // Task 3: also load the drill-down data — the entities (which carry post ids) and the
+        // full posts (id -> text), so the agent can reach individual posts. The CSV is the same
+        // export the pipeline reads; the ids match those in entities.json.
+        List<ClusterExtraction> entities = databaseRun
+                .map(DatabaseRun::extractions)
+                .orElseGet(Server::loadLocalEntities);
+        System.out.println("Loading posts from: " + csvPath);
+        PostStore posts = PostStore.fromCsv(Path.of(csvPath));
+        if (databaseRun.isPresent()) {
+            boolean complete = AgentDatabase.applyEmbeddingsIfComplete(
+                    posts.all(), databaseRun.get().embeddings());
+            System.out.println(complete
+                    ? "Database: applied all post embeddings for the selected run"
+                    : "Database: embedding coverage is incomplete; using the local cache");
+        }
+        PostIndex postIndex = new PostIndex(posts, new Embedder());   // vectors from cache, offline
+        System.out.printf("Loaded %d entities' clusters and %d posts for drill-down.%n",
+                entities.size(), posts.size());
+
+        Agent agent = new Agent(kb, index, entities, posts, postIndex);
+
+        // Enable CORS so the React frontend (served from a different port) can call these
+        // endpoints — browsers block cross-origin requests unless the server allows them.
+        Javalin app = Javalin.create(config ->
+                config.bundledPlugins.enableCors(cors -> cors.addRule(rule -> rule.anyHost()))
+        ).start(PORT);
+
+        // Any uncaught error comes back as clean JSON rather than an HTML stack trace.
+        app.exception(Exception.class, (e, ctx) -> {
+            ObjectNode error = JSON.createObjectNode();
+            error.put("error", e.getMessage());
+            ctx.status(500).contentType("application/json").result(error.toString());
+        });
+
+        // Data-source indicator: confirms the CSV has been processed and summarised.
+        app.get("/status", ctx -> {
+            ObjectNode status = JSON.createObjectNode();
+            status.put("ready", true);
+            status.put("totalPosts", kb.totalPosts());
+            status.put("topicCount", kb.topicCount());
+            ctx.contentType("application/json").result(status.toString());
+        });
+
+        // The list of topics, for the frontend's topic picker.
+        app.get("/topics", ctx -> {
+            ArrayNode topics = JSON.createArrayNode();
+            for (ConsolidatedSummary.TopicEntry topic : kb.topics()) {
+                ObjectNode node = topics.addObject();
+                node.put("clusterId", topic.clusterId());
+                node.put("postCount", topic.postCount());
+                node.put("what", topic.summary().what());
+            }
+            ctx.contentType("application/json").result(JSON.writeValueAsString(topics));
+        });
+
+        // The chat endpoint.
+        app.post("/chat", ctx -> {
+            JsonNode body = JSON.readTree(ctx.body());
+            String query = body.path("query").asText("");
+            if (query.isBlank()) {
+                ObjectNode error = JSON.createObjectNode();
+                error.put("error", "query is required");
+                ctx.status(400).contentType("application/json").result(error.toString());
+                return;
+            }
+
+            // Optional: restrict the answer to the topics the user picked.
+            List<Integer> topicIds = new ArrayList<>();
+            for (JsonNode id : body.path("topicIds")) {
+                topicIds.add(id.asInt());
+            }
+
+            long started = System.currentTimeMillis();
+            Agent.Answer answer = agent.answer(query, topicIds);
+            long elapsedMs = System.currentTimeMillis() - started;
+            System.out.printf("/chat answered in %.2f s: \"%s\"%n", elapsedMs / 1000.0, query);
+
+            ObjectNode response = JSON.createObjectNode();
+            response.put("answer", answer.text());
+            response.put("elapsedMs", elapsedMs);
+            ArrayNode sources = response.putArray("sources");
+            for (TopicIndex.Match m : answer.sources()) {
+                ObjectNode source = sources.addObject();
+                source.put("clusterId", m.topic().clusterId());
+                source.put("postCount", m.topic().postCount());
+                source.put("what", m.topic().summary().what());
+                source.put("score", Math.round(m.score() * 1000) / 1000.0);
+            }
+            ArrayNode researchLog = response.putArray("researchLog");
+            for (Agent.ResearchStep step : answer.researchLog()) {
+                ObjectNode node = researchLog.addObject();
+                node.put("title", step.title());
+                node.put("detail", step.detail());
+            }
+            ctx.contentType("application/json").result(JSON.writeValueAsString(response));
+        });
+
+        System.out.println("\nAgent ready on http://localhost:" + PORT);
+        System.out.println("Try:  curl -s localhost:" + PORT + "/status");
+        System.out.println("      curl -s -X POST localhost:" + PORT
+                + "/chat -H 'Content-Type: application/json' -d '{\"query\":\"what are people talking about?\"}'");
+    }
+
+    /** The posts CSV path: argument, environment, selected run, then the existing default. */
+    static String postsCsvPath(String[] args, String runCsvPath) {
+        if (args.length > 0 && !args[0].isBlank()) {
+            return args[0];
+        }
+        String fromEnv = System.getenv("POSTS_CSV");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            return fromEnv;
+        }
+        if (runCsvPath != null && !runCsvPath.isBlank()) {
+            return runCsvPath;
+        }
+        return DEFAULT_POSTS_CSV;
+    }
+
+    private static ConsolidatedSummary loadLocalKnowledgeBase() {
+        try {
+            return KnowledgeBase.load();
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not load the local knowledge base", e);
+        }
+    }
+
+    private static List<ClusterExtraction> loadLocalEntities() {
+        try {
+            return KnowledgeBase.loadEntities();
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not load local entity extractions", e);
+        }
+    }
+}

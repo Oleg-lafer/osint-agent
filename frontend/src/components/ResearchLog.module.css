@@ -1,0 +1,89 @@
+.wrap {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 0;
+}
+
+.toggle:hover {
+  color: var(--text);
+}
+
+.icon {
+  width: 10px;
+  font-size: 10px;
+}
+
+/* Smooth height animation via the 0fr -> 1fr grid trick. */
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.open {
+  grid-template-rows: 1fr;
+}
+
+.inner {
+  overflow: hidden;
+}
+
+.steps {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 2px 0 0 4px;
+}
+
+.step {
+  position: relative;
+  padding: 0 0 14px 18px;
+  border-left: 1px solid var(--border);
+}
+
+.step:last-child {
+  border-left-color: transparent;
+  padding-bottom: 2px;
+}
+
+.dot {
+  position: absolute;
+  left: -4px;
+  top: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.detail {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collapse {
+    transition: none;
+  }
+}

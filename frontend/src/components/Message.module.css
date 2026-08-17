@@ -1,0 +1,41 @@
+.row {
+  display: flex;
+}
+
+.user {
+  justify-content: flex-end;
+}
+
+.agent {
+  justify-content: flex-start;
+}
+
+.bubble {
+  max-width: 78%;
+  padding: 12px 15px;
+  border-radius: var(--radius);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.userBubble {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-bottom-right-radius: 5px;
+}
+
+.agentBubble {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 5px;
+}
+
+.error {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
+}
+
+.text {
+  margin: 0;
+  white-space: pre-wrap;
+}
