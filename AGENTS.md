@@ -29,7 +29,8 @@ The entry point is `com.leadspotnic.App`.
 1. `PostQualificationLoader` reads recent rows for a watch list from MySQL when database
    credentials are configured and no CSV path is supplied. It maps `userId` to profile name,
    `content` to text, and `creation_time` to publish date. Defaults are watch list `1406` and
-   the last `14` days. Otherwise, `CsvLoader` reads a supplied CSV or the bundled
+   the last `14` days, capped to the newest `5` matching rows during development.
+   Otherwise, `CsvLoader` reads a supplied CSV or the bundled
    `src/main/resources/posts.csv`.
    - Required columns: `profile_name`, `text`, `publish_date`.
    - Optional column: `embedding`, containing a JSON float array.
@@ -113,6 +114,7 @@ Set `DB_CREDENTIALS_FILE` to a file containing `host`, `user`, and `password`. O
 - `AGENT_PIPELINE_RUN_ID` (server: select a specific completed summarized run)
 - `WATCH_LIST_ID` (source query; default `1406`)
 - `POST_LOOKBACK_DAYS` (source query; default `14`)
+- `POST_LIMIT` (maximum newest source rows; development default `5`)
 
 Do not hard-code or print credentials. Do not commit machine-specific credential paths.
 
@@ -125,7 +127,7 @@ All direct OpenAI configuration is centralized in `com.leadspotnic.llm.OpenAi`.
 - Chat model: `gpt-4o-mini`
 - Embedding model: `text-embedding-3-small`
 - API base: `https://api.openai.com/v1`
-- Key: `OPENAI_API_KEY`, with a local `post-clustering/.env` fallback supported by the application
+- Key: raw key text in the gitignored `KEYS_AND_CREDENTIALS/OPEN_AI.txt` file
 
 LLM and embedding calls can cost money. Unit tests must remain offline. Do not run full uncached LLM workflows unless the task calls for it.
 
@@ -142,11 +144,19 @@ The server always loads original posts from CSV because the three AGENT tables d
 1. First server command argument
 2. `POSTS_CSV`
 3. CSV path recorded in the selected database run
-4. Current default path in `Server`
+4. The bundled `src/main/resources/posts.csv`
 
 When database embedding coverage does not cover every CSV post, the server uses the local embedding cache rather than mixing vector sources.
 
 ## Commands
+
+On Windows, start the backend and frontend together from the repository root. The launcher
+checks prerequisites, installs frontend dependencies when needed, waits for backend readiness,
+and stops both services on Ctrl+C:
+
+```powershell
+.\start-app.ps1
+```
 
 Run backend commands from `post-clustering/`.
 
@@ -167,6 +177,10 @@ mvn -q compile exec:java "-Dexec.args=C:\path\to\posts.csv --embed --extract --s
 mvn -q compile exec:java "-Dexec.mainClass=com.leadspotnic.web.Server"
 ```
 
+From the repository root, `run-test-pipeline.ps1` runs the complete database-backed
+development workflow for the newest five matching posts, including paid embedding,
+extraction, and summarization calls.
+
 Run frontend commands from `frontend/`.
 
 ```powershell
@@ -181,6 +195,7 @@ npm run build
 These files are intentionally ignored and should not be committed:
 
 - `post-clustering/.env`
+- `KEYS_AND_CREDENTIALS/`
 - `post-clustering/data/`
 - `embeddings-cache.json`
 - `summaries-cache.json`

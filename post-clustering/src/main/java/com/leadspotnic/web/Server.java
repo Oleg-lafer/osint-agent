@@ -40,7 +40,7 @@ public class Server {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     /** The default export, used when neither an argument nor POSTS_CSV overrides it. */
-    private static final String DEFAULT_POSTS_CSV = "data/lebanone posts - posts_text_6000.csv";
+    private static final String DEFAULT_POSTS_CSV = "src/main/resources/posts.csv";
 
     public static void main(String[] args) throws Exception {
         Optional<DatabaseRun> databaseRun = AgentDatabase.tryLoadPreferredRun();
@@ -68,9 +68,12 @@ public class Server {
         if (useDatabasePosts) {
             int watchListId = envInt("WATCH_LIST_ID", PostQualificationLoader.DEFAULT_WATCH_LIST_ID);
             int lookbackDays = envInt("POST_LOOKBACK_DAYS", PostQualificationLoader.DEFAULT_LOOKBACK_DAYS);
-            System.out.printf("Loading posts from post_qualification (watch list %d, last %d days)%n",
-                    watchListId, lookbackDays);
-            posts = PostStore.fromDatabase(sourceConfig.orElseThrow(), watchListId, lookbackDays);
+            int postLimit = envInt("POST_LIMIT", PostQualificationLoader.DEFAULT_POST_LIMIT);
+            System.out.printf("Loading posts from post_qualification "
+                            + "(watch list %d, last %d days, newest %d rows)%n",
+                    watchListId, lookbackDays, postLimit);
+            posts = PostStore.fromDatabase(
+                    sourceConfig.orElseThrow(), watchListId, lookbackDays, postLimit);
         } else {
             System.out.println("Loading posts from: " + csvPath);
             posts = PostStore.fromCsv(Path.of(csvPath));

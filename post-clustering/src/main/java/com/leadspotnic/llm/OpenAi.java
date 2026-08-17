@@ -11,6 +11,8 @@ import java.time.Duration;
 /** Single source of truth for the direct OpenAI API connection and model choices. */
 public final class OpenAi {
 
+    private static final Path API_KEY_FILE = Path.of("..", "KEYS_AND_CREDENTIALS", "OPEN_AI.txt");
+
     private OpenAi() {
     }
 
@@ -29,41 +31,23 @@ public final class OpenAi {
                 .build();
     }
 
-    /** Environment variables take precedence; a local gitignored .env is the fallback. */
+    /** Reads the raw OpenAI key from the repository's gitignored credentials directory. */
     public static String apiKey() {
-        String key = System.getenv("OPENAI_API_KEY");
-        if (key == null || key.isBlank()) {
-            key = readDotEnv("OPENAI_API_KEY");
-        }
-        if (key == null || key.isBlank()) {
-            throw new IllegalStateException(
-                    "OPENAI_API_KEY is not set. Add it to the environment or post-clustering/.env.");
-        }
-        return key;
+        return readKeyFile(API_KEY_FILE);
     }
 
-    static String readDotEnv(String name) {
-        Path file = Path.of(".env");
+    static String readKeyFile(Path file) {
         if (!Files.exists(file)) {
-            return null;
+            throw new IllegalStateException("OpenAI key file does not exist: "
+                    + file.toAbsolutePath().normalize());
         }
         try {
-            for (String line : Files.readAllLines(file)) {
-                String trimmed = line.trim();
-                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                    continue;
-                }
-                int separator = trimmed.indexOf('=');
-                if (separator < 1 || !trimmed.substring(0, separator).trim().equals(name)) {
-                    continue;
-                }
-                String value = trimmed.substring(separator + 1).trim();
-                if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
-                    value = value.substring(1, value.length() - 1);
-                }
-                return value;
+            String key = Files.readString(file).trim();
+            if (key.isBlank()) {
+                throw new IllegalStateException("OpenAI key file is empty: "
+                        + file.toAbsolutePath().normalize());
             }
-            return null;
+            return key;
         } catch (IOException e) {
             throw new IllegalStateException("Could not read " + file.toAbsolutePath(), e);
         }

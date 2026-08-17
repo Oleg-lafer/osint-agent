@@ -16,19 +16,22 @@ import java.util.Set;
 public final class PostQualificationLoader {
     public static final int DEFAULT_WATCH_LIST_ID = 1406;
     public static final int DEFAULT_LOOKBACK_DAYS = 14;
+    public static final int DEFAULT_POST_LIMIT = 5;
 
     private PostQualificationLoader() {}
 
-    public static List<Post> load(DatabaseConfig config, int watchListId, int lookbackDays,
+    public static List<Post> load(DatabaseConfig config, int watchListId, int lookbackDays, int postLimit,
                                   CsvLoader.Options options) throws Exception {
-        if (watchListId <= 0 || lookbackDays <= 0) {
-            throw new IllegalArgumentException("watchListId and lookbackDays must be positive");
+        if (watchListId <= 0 || lookbackDays <= 0 || postLimit <= 0) {
+            throw new IllegalArgumentException("watchListId, lookbackDays, and postLimit must be positive");
         }
         String sql = """
                 SELECT userId, content, creation_time
                 FROM post_qualification
                 WHERE watch_list_id = ?
                   AND DATEDIFF(NOW(), creation_time) < ?
+                ORDER BY creation_time DESC, postId DESC
+                LIMIT ?
                 """;
         List<Post> posts = new ArrayList<>();
         Set<String> seenTexts = new HashSet<>();
@@ -40,6 +43,7 @@ public final class PostQualificationLoader {
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, watchListId);
             statement.setInt(2, lookbackDays);
+            statement.setInt(3, postLimit);
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {
                     String text = rows.getString("content");
@@ -60,8 +64,9 @@ public final class PostQualificationLoader {
             }
         }
         System.out.printf("Loaded %d posts from post_qualification for watch list %d "
-                        + "(last %d days; skipped %d under %d chars, %d duplicate texts)%n",
-                posts.size(), watchListId, lookbackDays, tooShort, options.minTextLength(), duplicates);
+                        + "(last %d days, newest %d rows; skipped %d under %d chars, %d duplicate texts)%n",
+                posts.size(), watchListId, lookbackDays, postLimit,
+                tooShort, options.minTextLength(), duplicates);
         return posts;
     }
 }

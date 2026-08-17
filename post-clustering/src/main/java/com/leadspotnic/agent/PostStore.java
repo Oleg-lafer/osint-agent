@@ -44,9 +44,10 @@ public final class PostStore {
         return new PostStore(CsvLoader.loadFromFile(csvPath, CsvLoader.Options.teamPolicy()));
     }
 
-    public static PostStore fromDatabase(DatabaseConfig config, int watchListId, int lookbackDays)
+    public static PostStore fromDatabase(DatabaseConfig config, int watchListId, int lookbackDays,
+                                         int postLimit)
             throws Exception {
-        return new PostStore(PostQualificationLoader.load(config, watchListId, lookbackDays,
+        return new PostStore(PostQualificationLoader.load(config, watchListId, lookbackDays, postLimit,
                 CsvLoader.Options.teamPolicy()));
     }
 

@@ -92,6 +92,7 @@ public class App {
                     ? PostQualificationLoader.load(sourceConfig.get(),
                         envInt("WATCH_LIST_ID", PostQualificationLoader.DEFAULT_WATCH_LIST_ID),
                         envInt("POST_LOOKBACK_DAYS", PostQualificationLoader.DEFAULT_LOOKBACK_DAYS),
+                        envInt("POST_LIMIT", PostQualificationLoader.DEFAULT_POST_LIMIT),
                         CsvLoader.Options.teamPolicy())
                     : CsvLoader.loadFromClasspath("/posts.csv", CsvLoader.Options.teamPolicy());
         database.postsLoaded(posts);
