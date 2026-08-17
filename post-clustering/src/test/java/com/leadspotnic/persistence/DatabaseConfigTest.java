@@ -55,4 +55,26 @@ class DatabaseConfigTest {
         assertEquals("chosen_schema", config.database());
         assertEquals(3307, config.port());
     }
+
+    @Test
+    void readsCredentialsWhoseValuesAreOnFollowingLines() throws Exception {
+        Path credentials = tempDir.resolve("database.txt");
+        Files.writeString(credentials, """
+                host:
+                db.example.com
+                user:
+                agent
+                password:
+                secret
+                charset:
+                utf8mb4
+                """);
+
+        DatabaseConfig config = DatabaseConfig.fromEnvironment(
+                Map.of("DB_CREDENTIALS_FILE", credentials.toString())).orElseThrow();
+
+        assertEquals("db.example.com", config.host());
+        assertEquals("agent", config.user());
+        assertEquals("secret", config.password());
+    }
 }

@@ -14,11 +14,13 @@ import com.leadspotnic.cluster.Clusters;
 import com.leadspotnic.cluster.Embedder;
 import com.leadspotnic.cluster.SimilarityGraph;
 import com.leadspotnic.ingest.CsvLoader;
+import com.leadspotnic.ingest.PostQualificationLoader;
 import com.leadspotnic.model.ClusterExtraction;
 import com.leadspotnic.model.ClusterSummary;
 import com.leadspotnic.model.ConsolidatedSummary;
 import com.leadspotnic.model.Post;
 import com.leadspotnic.persistence.DatabasePipeline;
+import com.leadspotnic.persistence.DatabaseConfig;
 import com.leadspotnic.summarize.Consolidator;
 import com.leadspotnic.summarize.Extractor;
 import com.leadspotnic.summarize.KnowledgeBase;
@@ -46,12 +48,12 @@ import com.leadspotnic.summarize.Summarizer;
  */
 public class App {
 
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) throws Exception {
         String csvPath = csvPath(args);
         try (DatabasePipeline database = DatabasePipeline.start(csvPath, args)) {
             try {
                 run(args, csvPath, database);
-            } catch (IOException | InterruptedException | RuntimeException e) {
+            } catch (Exception e) {
                 database.fail(e);
                 throw e;
             }
@@ -59,7 +61,7 @@ public class App {
     }
 
     private static void run(String[] args, String csvPath, DatabasePipeline database)
-            throws IOException, InterruptedException {
+            throws Exception {
         List<String> flags = Arrays.asList(args);
         boolean embed = flags.contains("--embed");
         boolean summarize = flags.contains("--summarize");
@@ -83,11 +85,18 @@ public class App {
         long t;
 
         t = System.currentTimeMillis();
+        var sourceConfig = DatabaseConfig.fromEnvironment();
         List<Post> posts = csvPath != null
                 ? CsvLoader.loadFromFile(Path.of(csvPath), CsvLoader.Options.teamPolicy())
-                : CsvLoader.loadFromClasspath("/posts.csv", CsvLoader.Options.teamPolicy());
+                : sourceConfig.isPresent()
+                    ? PostQualificationLoader.load(sourceConfig.get(),
+                        envInt("WATCH_LIST_ID", PostQualificationLoader.DEFAULT_WATCH_LIST_ID),
+                        envInt("POST_LOOKBACK_DAYS", PostQualificationLoader.DEFAULT_LOOKBACK_DAYS),
+                        CsvLoader.Options.teamPolicy())
+                    : CsvLoader.loadFromClasspath("/posts.csv", CsvLoader.Options.teamPolicy());
         database.postsLoaded(posts);
-        timings.put("Load CSV", System.currentTimeMillis() - t);
+        timings.put(csvPath == null && sourceConfig.isPresent() ? "Load database posts" : "Load CSV",
+                System.currentTimeMillis() - t);
 
         t = System.currentTimeMillis();
         if (!new Embedder().embedAll(posts, embed)) {
@@ -215,5 +224,10 @@ public class App {
         return flags.stream().filter(flag -> flag.startsWith(prefix))
                 .findFirst().map(flag -> Double.parseDouble(flag.substring(prefix.length())))
                 .orElse(fallback);
+    }
+
+    private static int envInt(String name, int fallback) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? fallback : Integer.parseInt(value.trim());
     }
 }

@@ -10,6 +10,8 @@ import com.leadspotnic.agent.TopicIndex;
 import com.leadspotnic.agent.Agent;
 import com.leadspotnic.persistence.AgentDatabase;
 import com.leadspotnic.persistence.DatabaseRun;
+import com.leadspotnic.persistence.DatabaseConfig;
+import com.leadspotnic.ingest.PostQualificationLoader;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -59,8 +61,20 @@ public class Server {
         List<ClusterExtraction> entities = databaseRun
                 .map(DatabaseRun::extractions)
                 .orElseGet(Server::loadLocalEntities);
-        System.out.println("Loading posts from: " + csvPath);
-        PostStore posts = PostStore.fromCsv(Path.of(csvPath));
+        Optional<DatabaseConfig> sourceConfig = DatabaseConfig.fromEnvironment();
+        boolean useDatabasePosts = !hasExplicitCsv(args) && sourceConfig.isPresent()
+                && databaseRun.map(DatabaseRun::csvPath).orElse(null) == null;
+        PostStore posts;
+        if (useDatabasePosts) {
+            int watchListId = envInt("WATCH_LIST_ID", PostQualificationLoader.DEFAULT_WATCH_LIST_ID);
+            int lookbackDays = envInt("POST_LOOKBACK_DAYS", PostQualificationLoader.DEFAULT_LOOKBACK_DAYS);
+            System.out.printf("Loading posts from post_qualification (watch list %d, last %d days)%n",
+                    watchListId, lookbackDays);
+            posts = PostStore.fromDatabase(sourceConfig.orElseThrow(), watchListId, lookbackDays);
+        } else {
+            System.out.println("Loading posts from: " + csvPath);
+            posts = PostStore.fromCsv(Path.of(csvPath));
+        }
         if (databaseRun.isPresent()) {
             boolean complete = AgentDatabase.applyEmbeddingsIfComplete(
                     posts.all(), databaseRun.get().embeddings());
@@ -169,6 +183,19 @@ public class Server {
             return runCsvPath;
         }
         return DEFAULT_POSTS_CSV;
+    }
+
+    private static boolean hasExplicitCsv(String[] args) {
+        if (args.length > 0 && !args[0].isBlank()) {
+            return true;
+        }
+        String value = System.getenv("POSTS_CSV");
+        return value != null && !value.isBlank();
+    }
+
+    private static int envInt(String name, int fallback) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? fallback : Integer.parseInt(value.trim());
     }
 
     private static ConsolidatedSummary loadLocalKnowledgeBase() {

@@ -13,7 +13,8 @@ The repository contains:
 
 ## Core invariants
 
-- CSV is the only source input in the current phase.
+- `post_qualification` is the default source when `DB_CREDENTIALS_FILE` is configured and no
+  explicit CSV path is supplied. CSV remains available as an explicit input and offline fallback.
 - The local pipeline is the behavioral baseline. Database integration must remain additive and must not change ingestion, embeddings, graph construction, clustering, extraction, summarization, or consolidation logic.
 - Local caches and JSON outputs must continue to be written when database persistence is enabled.
 - MySQL persistence is optional and best-effort. Missing configuration or a database failure must log a warning and allow local processing to continue.
@@ -25,7 +26,11 @@ The repository contains:
 
 The entry point is `com.leadspotnic.App`.
 
-1. `CsvLoader` reads a supplied CSV or the bundled `src/main/resources/posts.csv`.
+1. `PostQualificationLoader` reads recent rows for a watch list from MySQL when database
+   credentials are configured and no CSV path is supplied. It maps `userId` to profile name,
+   `content` to text, and `creation_time` to publish date. Defaults are watch list `1406` and
+   the last `14` days. Otherwise, `CsvLoader` reads a supplied CSV or the bundled
+   `src/main/resources/posts.csv`.
    - Required columns: `profile_name`, `text`, `publish_date`.
    - Optional column: `embedding`, containing a JSON float array.
    - Current policy drops normalized text shorter than 15 characters and keeps duplicate texts.
@@ -56,7 +61,7 @@ The canonical equivalence is:
 
 | Pipeline object | Local output | Database output |
 |---|---|---|
-| Accepted post and normalized text | In memory / source CSV | `AGENT_post_processing` |
+| Accepted post and normalized text | In memory / source query or CSV | `AGENT_post_processing` |
 | Post embedding | `embeddings-cache.json` | `AGENT_post_processing.embedding` |
 | `ClusterSummary` | `knowledge-base.json` and `summaries-cache.json` | `AGENT_clusters.cluster_summary` |
 | `ClusterExtraction` | `entities.json` and `extractions-cache.json` | `AGENT_clusters.entities_and_evidence` |
@@ -90,7 +95,7 @@ The pair `(pipeline_run_id, cluster_number)` is unique.
 
 One row per accepted CSV occurrence per run.
 
-- CSV rows use `source_table = 'CSV'`.
+- Database-source rows use `source_table = 'post_qualification'`; CSV rows use `source_table = 'CSV'`.
 - `source_post_id` is the content-hash ID; repeated identical occurrences receive `#2`, `#3`, and so on to satisfy uniqueness without changing `Post` identity.
 - `normalized_text` contains the exact text processed by the current pipeline despite its historical column name.
 - `embedding` contains the vector as JSON.
@@ -106,10 +111,12 @@ Set `DB_CREDENTIALS_FILE` to a file containing `host`, `user`, and `password`. O
 - `DB_NAME` (default `leadspot_main`)
 - `DB_PORT` (default `3306`)
 - `AGENT_PIPELINE_RUN_ID` (server: select a specific completed summarized run)
+- `WATCH_LIST_ID` (source query; default `1406`)
+- `POST_LOOKBACK_DAYS` (source query; default `14`)
 
 Do not hard-code or print credentials. Do not commit machine-specific credential paths.
 
-The chat server selects the newest completed run containing an overview and summarized clusters unless `AGENT_PIPELINE_RUN_ID` is set. If loading is unavailable or unusable, it falls back to local files.
+The chat server selects the newest completed run containing an overview and summarized clusters unless `AGENT_PIPELINE_RUN_ID` is set. If loading is unavailable or unusable, it falls back to local files. For database-source runs it reloads drill-down posts from `post_qualification`; explicit CSV paths still take precedence.
 
 ## OpenAI configuration
 

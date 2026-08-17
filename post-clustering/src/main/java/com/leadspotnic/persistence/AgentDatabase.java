@@ -65,12 +65,16 @@ public final class AgentDatabase implements AutoCloseable {
         }
     }
 
-    /** Inserts every accepted CSV occurrence and returns its DB row id by object identity. */
+    /** Inserts every accepted source occurrence and returns its DB row id by object identity. */
     public Map<Post, Long> insertPosts(long runId, List<Post> posts) throws Exception {
+        return insertPosts(runId, posts, "CSV");
+    }
+
+    public Map<Post, Long> insertPosts(long runId, List<Post> posts, String sourceTable) throws Exception {
         String sql = """
                 INSERT INTO AGENT_post_processing
                     (pipeline_run_id, source_table, source_post_id, normalized_text, processing_status)
-                VALUES (?, 'CSV', ?, ?, 'PENDING')
+                VALUES (?, ?, ?, ?, 'PENDING')
                 """;
         Map<Post, Long> rowIds = new IdentityHashMap<>();
         Map<Post, String> sourceIds = sourceIds(posts);
@@ -80,8 +84,9 @@ public final class AgentDatabase implements AutoCloseable {
             int queued = 0;
             for (Post post : posts) {
                 statement.setLong(1, runId);
-                statement.setString(2, sourceIds.get(post));
-                statement.setString(3, post.getText());
+                statement.setString(2, sourceTable);
+                statement.setString(3, sourceIds.get(post));
+                statement.setString(4, post.getText());
                 statement.addBatch();
                 if (++queued % WRITE_BATCH_SIZE == 0) {
                     statement.executeBatch();
@@ -95,10 +100,11 @@ public final class AgentDatabase implements AutoCloseable {
             Map<String, Long> rowsBySourceId = new LinkedHashMap<>();
             String select = """
                     SELECT id, source_post_id FROM AGENT_post_processing
-                    WHERE pipeline_run_id = ? AND source_table = 'CSV'
+                    WHERE pipeline_run_id = ? AND source_table = ?
                     """;
             try (PreparedStatement lookup = connection.prepareStatement(select)) {
                 lookup.setLong(1, runId);
+                lookup.setString(2, sourceTable);
                 try (ResultSet rows = lookup.executeQuery()) {
                     while (rows.next()) {
                         rowsBySourceId.put(rows.getString("source_post_id"), rows.getLong("id"));

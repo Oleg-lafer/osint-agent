@@ -17,6 +17,7 @@ public final class DatabasePipeline implements AutoCloseable {
     private long runId;
     private Map<Post, Long> postRows = new IdentityHashMap<>();
     private Map<Integer, Long> clusterRows = Map.of();
+    private String sourceTable = "CSV";
 
     private DatabasePipeline() {}
 
@@ -28,6 +29,7 @@ public final class DatabasePipeline implements AutoCloseable {
                 return pipeline;
             }
             pipeline.database = new AgentDatabase(config.get());
+            pipeline.sourceTable = csvPath == null ? "post_qualification" : "CSV";
             pipeline.runId = pipeline.database.createRun(OpenAi.EMBED_MODEL, csvPath, args);
             System.out.println("Database: started pipeline run " + pipeline.runId);
         } catch (Exception e) {
@@ -37,7 +39,8 @@ public final class DatabasePipeline implements AutoCloseable {
     }
 
     public void postsLoaded(List<Post> posts) {
-        execute("could not save accepted posts", () -> postRows = database.insertPosts(runId, posts));
+        execute("could not save accepted posts", () ->
+                postRows = database.insertPosts(runId, posts, sourceTable));
     }
 
     public void embeddingsReady() {

@@ -37,10 +37,20 @@ public record DatabaseConfig(String host, int port, String database, String user
 
     static Map<String, String> parse(Path path) throws IOException {
         Map<String, String> values = new HashMap<>();
+        String pendingKey = null;
         for (String line : Files.readAllLines(path)) {
             Matcher matcher = ENTRY.matcher(line);
             if (matcher.matches()) {
                 values.put(matcher.group(1).toLowerCase(), matcher.group(2));
+                pendingKey = null;
+                continue;
+            }
+            matcher = Pattern.compile("^\\s*([A-Za-z_]+)\\s*:\\s*$").matcher(line);
+            if (matcher.matches()) {
+                pendingKey = matcher.group(1).toLowerCase();
+            } else if (pendingKey != null && !line.isBlank()) {
+                values.put(pendingKey, line.trim());
+                pendingKey = null;
             }
         }
         return values;
@@ -58,7 +68,7 @@ public record DatabaseConfig(String host, int port, String database, String user
         return value == null || value.isBlank() ? fallback : value;
     }
 
-    String jdbcUrl() {
+    public String jdbcUrl() {
         return "jdbc:mysql://" + host + ":" + port + "/" + database
                 + "?useSSL=true&requireSSL=true&serverTimezone=UTC&rewriteBatchedStatements=true";
     }

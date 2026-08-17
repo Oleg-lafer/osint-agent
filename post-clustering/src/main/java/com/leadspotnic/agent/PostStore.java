@@ -1,7 +1,9 @@
 package com.leadspotnic.agent;
 
 import com.leadspotnic.ingest.CsvLoader;
+import com.leadspotnic.ingest.PostQualificationLoader;
 import com.leadspotnic.model.Post;
+import com.leadspotnic.persistence.DatabaseConfig;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -40,6 +42,12 @@ public final class PostStore {
     /** Loads the real export the pipeline uses, applying the same team noise policy. */
     public static PostStore fromCsv(Path csvPath) throws IOException {
         return new PostStore(CsvLoader.loadFromFile(csvPath, CsvLoader.Options.teamPolicy()));
+    }
+
+    public static PostStore fromDatabase(DatabaseConfig config, int watchListId, int lookbackDays)
+            throws Exception {
+        return new PostStore(PostQualificationLoader.load(config, watchListId, lookbackDays,
+                CsvLoader.Options.teamPolicy()));
     }
 
     /** Fallback for tests / demos: the bundled toy CSV on the classpath. */
