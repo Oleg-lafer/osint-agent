@@ -9,6 +9,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /** Best-effort DB mirror of the existing in-memory/file pipeline. */
 public final class DatabasePipeline implements AutoCloseable {
@@ -30,8 +31,11 @@ public final class DatabasePipeline implements AutoCloseable {
             }
             pipeline.database = new AgentDatabase(config.get());
             pipeline.sourceTable = csvPath == null ? "post_qualification" : "CSV";
-            pipeline.runId = pipeline.database.createRun(OpenAi.EMBED_MODEL, csvPath, args);
-            System.out.println("Database: started pipeline run " + pipeline.runId);
+            String postGroupId = postGroupId(args, System.getenv());
+            pipeline.runId = pipeline.database.createRun(
+                    postGroupId, OpenAi.EMBED_MODEL, csvPath, args);
+            System.out.println("Database: started pipeline run " + pipeline.runId
+                    + " for post group " + postGroupId);
         } catch (Exception e) {
             pipeline.disable("could not start persistence", e);
         }
@@ -93,6 +97,29 @@ public final class DatabasePipeline implements AutoCloseable {
 
     public boolean enabled() {
         return database != null;
+    }
+
+    static String postGroupId(String[] args, Map<String, String> environment) {
+        for (String arg : args) {
+            if (arg.startsWith("--post-group-id=")) {
+                return requirePostGroupId(arg.substring("--post-group-id=".length()));
+            }
+        }
+        String configured = environment.get("POST_GROUP_ID");
+        return configured == null || configured.isBlank()
+                ? UUID.randomUUID().toString()
+                : requirePostGroupId(configured);
+    }
+
+    private static String requirePostGroupId(String value) {
+        String normalized = value.trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("post_group_id must not be blank");
+        }
+        if (normalized.length() > 255) {
+            throw new IllegalArgumentException("post_group_id must not exceed 255 characters");
+        }
+        return normalized;
     }
 
     private void execute(String description, DatabaseWork work) {

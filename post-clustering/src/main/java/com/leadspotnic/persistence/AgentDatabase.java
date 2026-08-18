@@ -36,7 +36,8 @@ public final class AgentDatabase implements AutoCloseable {
                 config.jdbcUrl(), config.user(), config.password());
     }
 
-    public long createRun(String embeddingModel, String csvPath, String[] args) throws Exception {
+    public long createRun(String postGroupId, String embeddingModel, String csvPath, String[] args)
+            throws Exception {
         ObjectNode parameters = JSON.createObjectNode();
         if (csvPath != null) {
             parameters.put("csvPath", csvPath);
@@ -48,13 +49,14 @@ public final class AgentDatabase implements AutoCloseable {
 
         String sql = """
                 INSERT INTO AGENT_pipeline_runs
-                    (status, embedding_model, parameters_json, started_at)
-                VALUES ('RUNNING', ?, ?, ?)
+                    (post_group_id, status, embedding_model, parameters_json, started_at)
+                VALUES (?, 'RUNNING', ?, ?, ?)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            statement.setString(1, embeddingModel);
-            statement.setString(2, JSON.writeValueAsString(parameters));
-            statement.setTimestamp(3, Timestamp.from(Instant.now()));
+            statement.setString(1, postGroupId);
+            statement.setString(2, embeddingModel);
+            statement.setString(3, JSON.writeValueAsString(parameters));
+            statement.setTimestamp(4, Timestamp.from(Instant.now()));
             statement.executeUpdate();
             try (ResultSet keys = statement.getGeneratedKeys()) {
                 if (!keys.next()) {
@@ -164,7 +166,7 @@ public final class AgentDatabase implements AutoCloseable {
     public Map<Integer, Long> saveClusters(long runId, Map<Integer, List<Post>> clusters,
                                            Map<Post, Long> rowIds) throws Exception {
         String insert = """
-                INSERT INTO AGENT_clusters (pipeline_run_id, cluster_number, post_count)
+                INSERT INTO AGENT_clusters (PreProcessing_run_id, cluster_number, post_count)
                 VALUES (?, ?, ?)
                 """;
         String assign = """
@@ -262,7 +264,7 @@ public final class AgentDatabase implements AutoCloseable {
         String clusterSql = """
                 SELECT cluster_number, post_count, cluster_summary, entities_and_evidence
                 FROM AGENT_clusters
-                WHERE pipeline_run_id = ? AND cluster_summary IS NOT NULL
+                WHERE PreProcessing_run_id = ? AND cluster_summary IS NOT NULL
                 ORDER BY cluster_number
                 """;
         try (PreparedStatement statement = connection.prepareStatement(clusterSql)) {
@@ -298,18 +300,18 @@ public final class AgentDatabase implements AutoCloseable {
         Map<Long, float[]> embeddings = loadEmbeddings(header.id());
         ConsolidatedSummary kb = new ConsolidatedSummary(
                 totalPosts, topics.size(), header.overview(), topics);
-        return new DatabaseRun(header.id(), kb, List.copyOf(extractions),
+        return new DatabaseRun(header.id(), header.postGroupId(), kb, List.copyOf(extractions),
                 Map.copyOf(embeddings), header.csvPath());
     }
 
     private RunHeader findRun(Long requestedRunId) throws Exception {
         String eligibility = "status = 'COMPLETED' AND dataset_overview IS NOT NULL "
                 + "AND EXISTS (SELECT 1 FROM AGENT_clusters c "
-                + "WHERE c.pipeline_run_id = AGENT_pipeline_runs.id AND c.cluster_summary IS NOT NULL)";
+                + "WHERE c.PreProcessing_run_id = AGENT_pipeline_runs.id AND c.cluster_summary IS NOT NULL)";
         String sql = requestedRunId == null
-                ? "SELECT id, dataset_overview, parameters_json FROM AGENT_pipeline_runs WHERE "
+                ? "SELECT id, post_group_id, dataset_overview, parameters_json FROM AGENT_pipeline_runs WHERE "
                     + eligibility + " ORDER BY completed_at DESC, id DESC LIMIT 1"
-                : "SELECT id, dataset_overview, parameters_json FROM AGENT_pipeline_runs WHERE id = ? AND "
+                : "SELECT id, post_group_id, dataset_overview, parameters_json FROM AGENT_pipeline_runs WHERE id = ? AND "
                     + eligibility;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             if (requestedRunId != null) {
@@ -327,7 +329,8 @@ public final class AgentDatabase implements AutoCloseable {
                     JsonNode parameters = JSON.readTree(parametersJson);
                     csvPath = parameters.path("csvPath").asText(null);
                 }
-                return new RunHeader(row.getLong("id"), row.getString("dataset_overview"), csvPath);
+                return new RunHeader(row.getLong("id"), row.getString("post_group_id"),
+                        row.getString("dataset_overview"), csvPath);
             }
         }
     }
@@ -387,6 +390,19 @@ public final class AgentDatabase implements AutoCloseable {
         }
     }
 
+    /** Loads the selected database run without permitting the server's local-file fallback. */
+    public static DatabaseRun loadRequiredRun() throws Exception {
+        DatabaseConfig config = DatabaseConfig.fromEnvironment()
+                .orElseThrow(() -> new IllegalStateException(
+                        "DB_CREDENTIALS_FILE is required in database-only mode"));
+        Long requested = requestedRunId(System.getenv());
+        try (AgentDatabase database = new AgentDatabase(config)) {
+            DatabaseRun run = database.loadRun(requested);
+            System.out.println("Database: loaded required pipeline run " + run.id());
+            return run;
+        }
+    }
+
     static Long requestedRunId(Map<String, String> environment) {
         String value = environment.get("AGENT_PIPELINE_RUN_ID");
         return value == null || value.isBlank() ? null : Long.parseLong(value.trim());
@@ -411,7 +427,7 @@ public final class AgentDatabase implements AutoCloseable {
         connection.close();
     }
 
-    private record RunHeader(long id, String overview, String csvPath) {}
+    private record RunHeader(long id, String postGroupId, String overview, String csvPath) {}
 
     @FunctionalInterface
     private interface SqlWork {

@@ -45,6 +45,7 @@ import com.leadspotnic.summarize.Summarizer;
  *   --resolution=3.0       Leiden: higher gives more, smaller, tighter clusters
  *   --max-cluster=100      cap cluster size; bigger clusters are split into sub-clusters
  *   --split-resolution=1.0 how hard to split an oversized cluster (lower = fewer sub-clusters)
+ *   --post-group-id=group-A logical post group shared by otherwise independent DB runs
  */
 public class App {
 
