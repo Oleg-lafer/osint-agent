@@ -178,7 +178,7 @@ When database embedding coverage does not cover every CSV post, the server uses 
 
 ## Commands
 
-On Windows, start the backend and frontend together from the repository root. The launcher
+On Windows, start the live chat backend and frontend together from the repository root. The launcher
 checks prerequisites, installs frontend dependencies when needed, waits for backend readiness,
 and stops both services on Ctrl+C. It defaults `DB_CREDENTIALS_FILE` to the gitignored
 `KEYS_AND_CREDENTIALS/DataBase_Credentials.txt` when the variable is unset and enables strict
@@ -186,7 +186,14 @@ database-only mode. Startup fails instead of reading local CSV, JSON, or embeddi
 the selected run or its source data is unavailable or incomplete:
 
 ```powershell
-.\start-app.ps1
+& '.\live chat.ps1'
+```
+
+Run the database-backed PreProcessing pipeline separately and pass the number of newest posts
+to process as its required argument. This invokes paid OpenAI calls and does not start live chat:
+
+```powershell
+& '.\PreProcessing pipeline.ps1' 50
 ```
 
 Run backend commands from `post-clustering/`.
@@ -210,10 +217,6 @@ mvn -q compile exec:java "-Dexec.args=--post-group-id=group-A --embed --extract 
 # Chat server
 mvn -q compile exec:java "-Dexec.mainClass=com.leadspotnic.web.Server"
 ```
-
-From the repository root, `run-test-pipeline.ps1` runs the complete database-backed
-development workflow for the newest five matching posts, including paid embedding,
-extraction, and summarization calls.
 
 Run frontend commands from `frontend/`.
 
