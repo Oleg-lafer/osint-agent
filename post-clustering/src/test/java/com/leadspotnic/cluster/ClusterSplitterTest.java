@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Offline (no API). Plants an oversized cluster and checks the splitter guarantees the cap.
- * Random vectors don't form real sub-topics, so this mostly exercises the hard-chunk safety net
+ * Random vectors don't form meaningful sub-clusters, so this mostly exercises the safety net
  * — which is exactly the "no cluster > maxSize" guarantee we care about.
  */
 class ClusterSplitterTest {

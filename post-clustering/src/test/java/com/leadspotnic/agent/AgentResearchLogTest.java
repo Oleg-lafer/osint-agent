@@ -6,7 +6,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -15,27 +14,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AgentResearchLogTest {
 
-    private static TopicIndex.Match match(int id, String what) {
+    private static ClusterIndex.Match match(int id, String what) {
         ClusterSummary summary = new ClusterSummary("some people", what, "", "2026");
-        return new TopicIndex.Match(new ConsolidatedSummary.TopicEntry(id, 100, summary), 1.0);
+        return new ClusterIndex.Match(new ConsolidatedSummary.ClusterEntry(id, 100, summary), 1.0);
     }
 
-    private static final List<TopicIndex.Match> MATCHES =
+    private static final List<ClusterIndex.Match> MATCHES =
             List.of(match(0, "Football and the World Cup"), match(1, "Lebanese politics"));
 
     @Test
-    void searchedTraceLooksAcrossAllTopicsThenSelects() {
-        List<String> trace = Agent.buildActionTrace(MATCHES, false, 41);
+    void searchedTraceLooksAcrossAllClustersThenSelects() {
+        List<String> trace = Agent.buildActionTrace(MATCHES, 41);
 
-        assertTrue(trace.stream().anyMatch(a -> a.contains("all 41 topics")));
+        assertTrue(trace.stream().anyMatch(a -> a.contains("all 41 clusters")));
         assertTrue(trace.stream().anyMatch(a -> a.contains("Football and the World Cup")));
     }
 
-    @Test
-    void scopedTraceUsesOnlyTheChosenTopics() {
-        List<String> trace = Agent.buildActionTrace(MATCHES, true, 41);
-
-        assertTrue(trace.stream().anyMatch(a -> a.contains("the user chose")));
-        assertFalse(trace.stream().anyMatch(a -> a.contains("all 41 topics")));
-    }
 }

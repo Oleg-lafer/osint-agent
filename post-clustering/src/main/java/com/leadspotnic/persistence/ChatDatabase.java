@@ -77,16 +77,16 @@ public final class ChatDatabase {
     }
 
     /** Atomically reserves consecutive sequence numbers for the user and assistant messages. */
-    public long beginTurn(String sessionId, String query, List<Integer> topicIds) throws Exception {
+    public long beginTurn(String sessionId, String query) throws Exception {
         try (Connection connection = connection()) {
             connection.setAutoCommit(false);
             try {
                 lockActiveSession(connection, sessionId);
                 int next = nextSequence(connection, sessionId);
                 insertMessage(connection, sessionId, next, "USER", query, "COMPLETED",
-                        topicIds, null);
+                        List.of(), null);
                 long assistantId = insertMessage(connection, sessionId, next + 1, "ASSISTANT", null,
-                        "PENDING", topicIds, OpenAi.CHAT_MODEL);
+                        "PENDING", List.of(), OpenAi.CHAT_MODEL);
                 try (PreparedStatement update = connection.prepareStatement(
                         "UPDATE AGENT_chat_sessions SET updated_at = ? WHERE id = ?")) {
                     update.setTimestamp(1, Timestamp.from(Instant.now()));
@@ -102,17 +102,17 @@ public final class ChatDatabase {
         }
     }
 
-    public void completeTurn(long messageId, String answer, long elapsedMs, List<Integer> topicIds,
+    public void completeTurn(long messageId, String answer, long elapsedMs, List<Integer> clusterIds,
                              Object sources, Object researchLog) throws Exception {
         String sql = """
-                UPDATE AGENT_chat_messages SET content = ?, topic_ids = ?, sources = ?, research_log = ?,
+                UPDATE AGENT_chat_messages SET content = ?, cluster_ids = ?, sources = ?, research_log = ?,
                     elapsed_ms = ?, status = 'COMPLETED', error_message = NULL
                 WHERE id = ? AND role = 'ASSISTANT'
                 """;
         try (Connection connection = connection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, answer);
-            statement.setString(2, JSON.writeValueAsString(topicIds));
+            statement.setString(2, JSON.writeValueAsString(clusterIds));
             statement.setString(3, JSON.writeValueAsString(sources));
             statement.setString(4, JSON.writeValueAsString(researchLog));
             statement.setLong(5, elapsedMs);
@@ -170,10 +170,10 @@ public final class ChatDatabase {
 
     private static long insertMessage(Connection connection, String sessionId, int sequence,
                                       String role, String content, String status,
-                                      List<Integer> topicIds, String model) throws Exception {
+                                      List<Integer> clusterIds, String model) throws Exception {
         String sql = """
                 INSERT INTO AGENT_chat_messages
-                    (session_id, sequence_number, role, content, topic_ids, model, status)
+                    (session_id, sequence_number, role, content, cluster_ids, model, status)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
@@ -181,7 +181,7 @@ public final class ChatDatabase {
             statement.setInt(2, sequence);
             statement.setString(3, role);
             statement.setString(4, content);
-            statement.setString(5, JSON.writeValueAsString(topicIds == null ? List.of() : topicIds));
+            statement.setString(5, JSON.writeValueAsString(clusterIds == null ? List.of() : clusterIds));
             statement.setString(6, model);
             statement.setString(7, status);
             statement.executeUpdate();

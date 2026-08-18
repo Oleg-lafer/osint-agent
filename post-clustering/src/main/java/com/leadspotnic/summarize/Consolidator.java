@@ -16,21 +16,21 @@ import java.util.Map;
  * Step 3: merges the individual cluster summaries into one ConsolidatedSummary.
  *
  * Two halves:
- *   - mechanical: wrap every cluster into a TopicEntry (its id, size, and Step 2 summary)
+ *   - mechanical: wrap every cluster into a ClusterEntry (its id, size, and Step 2 summary)
  *   - LLM: one call that turns those summaries into a single big-picture overview paragraph
  *
- * The overview is what Step 4 will read for high-level questions; the per-topic entries are
+ * The overview is what Step 4 will read for high-level questions; the per-cluster entries are
  * what it will search for specific ones.
  */
 public class Consolidator {
 
     private static final String OVERVIEW_INSTRUCTIONS = """
-            Below are the topics found across a dataset of social-media posts, each with how
+            Below are the generated clusters found across a dataset of social-media posts, each with how
             many posts it holds. Write ONE short paragraph (3-5 sentences) in English that
             describes what the dataset as a whole is about and its main themes. Base it only
-            on the topics listed â€” do not invent anything.
+            on the cluster summaries listed â€” do not invent anything.
 
-            Topics:
+            Clusters:
             """;
 
     /** The typed door for the overview call: returns a plain paragraph, not a record. */
@@ -50,30 +50,30 @@ public class Consolidator {
      */
     public ConsolidatedSummary consolidate(Map<Integer, List<Post>> byCluster,
                                            Map<Integer, ClusterSummary> summaries) {
-        // --- mechanical half: one TopicEntry per summarised cluster, largest first ---
+        // --- mechanical half: one ClusterEntry per summarised cluster, largest first ---
         List<Integer> ids = new ArrayList<>(summaries.keySet());
         ids.sort((a, b) -> byCluster.get(b).size() - byCluster.get(a).size());
 
-        List<ConsolidatedSummary.TopicEntry> topics = new ArrayList<>();
+        List<ConsolidatedSummary.ClusterEntry> clusters = new ArrayList<>();
         for (int id : ids) {
             int postCount = byCluster.get(id).size();
-            topics.add(new ConsolidatedSummary.TopicEntry(id, postCount, summaries.get(id)));
+            clusters.add(new ConsolidatedSummary.ClusterEntry(id, postCount, summaries.get(id)));
         }
 
         int totalPosts = byCluster.values().stream().mapToInt(List::size).sum();
 
-        // --- LLM half: one overview paragraph from the topic summaries ---
-        String overview = editor().writeOverview(OVERVIEW_INSTRUCTIONS + renderTopics(topics));
+        // --- LLM half: one overview paragraph from the cluster summaries ---
+        String overview = editor().writeOverview(OVERVIEW_INSTRUCTIONS + renderClusters(clusters));
 
-        return new ConsolidatedSummary(totalPosts, topics.size(), overview, topics);
+        return new ConsolidatedSummary(totalPosts, clusters.size(), overview, clusters);
     }
 
-    /** One line per topic: "- what [N posts]", the material the overview is written from. */
-    private static String renderTopics(List<ConsolidatedSummary.TopicEntry> topics) {
+    /** One line per cluster: "- what [N posts]", the material the overview is written from. */
+    private static String renderClusters(List<ConsolidatedSummary.ClusterEntry> clusters) {
         StringBuilder sb = new StringBuilder();
-        for (ConsolidatedSummary.TopicEntry topic : topics) {
-            sb.append("- ").append(topic.summary().what())
-              .append(" [").append(topic.postCount()).append(" posts]\n");
+        for (ConsolidatedSummary.ClusterEntry cluster : clusters) {
+            sb.append("- ").append(cluster.summary().what())
+              .append(" [").append(cluster.postCount()).append(" posts]\n");
         }
         return sb.toString();
     }

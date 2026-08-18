@@ -20,7 +20,7 @@ import java.util.List;
  * steered by the Assistant's system message, not hard-coded here.
  *
  *   loadPosts   — drill-down: the ids came from an entity, fetch those exact posts.
- *   searchPosts — semantic search: no ids, find posts by meaning (topic no entity captured).
+ *   searchPosts — semantic search: no ids, find posts by meaning when no entity was captured.
  *   filterPosts — structured filter: exact fields (author, date range).
  */
 public class AgentTools {
@@ -57,7 +57,7 @@ public class AgentTools {
 
     @Tool("""
             Search all posts by meaning and return the most relevant ones. Use this when the
-            question is about something the topic summaries and entities do not cover, so there
+            question is about something the cluster summaries and entities do not cover, so there
             are no post ids to load. Returns the closest posts with author, date and text.
             """)
     public String searchPosts(@P("what to search for, in natural language") String query) {

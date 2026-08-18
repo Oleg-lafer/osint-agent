@@ -26,11 +26,11 @@ public final class EntityPrompt {
 
     public enum Category {
         WHAT("""
-                List the main TOPICS or subjects discussed. For each:
-                  name    = a short label for the topic
-                  type    = "topic"
+                List the main SUBJECTS discussed. For each:
+                  name    = a short label for the subject
+                  type    = "subject"
                   context = a substantive summary (3-5 sentences) of what the posts actually
-                            say about this topic: the specific claims, events, opinions and
+                            say about this subject: the specific claims, events, opinions and
                             details expressed — concrete content, not a generic description.
                   postRefs = the numbers of the posts that discuss it
                 """),

@@ -46,14 +46,14 @@ class AgentDatabaseIntegrationTest {
                 database.saveSummary(clusterRows.get(0),
                         new ClusterSummary("Smoke users", "DB smoke test", "", "2026-08-12"));
                 database.saveExtraction(clusterRows.get(0), new ClusterExtraction(0,
-                        List.of(new Entity("DB smoke test", "topic", "Synthetic evidence",
+                        List.of(new Entity("DB smoke test", "subject", "Synthetic evidence",
                                 List.of(first.getPostId()))),
                         List.of(), List.of()));
                 database.completeRun(runId, "Synthetic database integration smoke test.");
 
                 DatabaseRun loaded = database.loadRun(runId);
                 assertEquals(2, loaded.knowledgeBase().totalPosts());
-                assertEquals(1, loaded.knowledgeBase().topicCount());
+                assertEquals(1, loaded.knowledgeBase().clusterCount());
                 assertEquals(1, loaded.extractions().size());
                 assertEquals(2, loaded.embeddings().size());
                 assertEquals("smoke-test.csv", loaded.csvPath());

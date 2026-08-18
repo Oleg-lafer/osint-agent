@@ -4,7 +4,9 @@ This file is the authoritative working guide for this repository. Keep it curren
 
 ## Product purpose
 
-Leadspotnic ingests social-media posts from CSV, discovers topics without predefined labels, extracts structured entities and evidence, summarizes the topics, builds a consolidated overview, and serves a sourced chat interface.
+Leadspotnic ingests social-media posts from CSV, discovers clusters without predefined labels,
+extracts structured entities and evidence, summarizes the clusters, builds a consolidated
+overview, and serves a sourced chat interface.
 
 The repository contains:
 
@@ -46,7 +48,7 @@ The entry point is `com.leadspotnic.App`.
 5. `ClusterSplitter` re-clusters or chunks clusters larger than the configured maximum, then final cluster numbers are assigned.
 6. With `--extract`, `Extractor` performs separate WHAT, WHO, and WHERE extraction calls for every cluster. It maps small prompt-local evidence references back to real content-hash post IDs. Results go to `entities.json` and `extractions-cache.json`.
 7. With `--summarize`, `Summarizer` creates a `ClusterSummary` (`who`, `what`, `where`, `when`) for every cluster. Results are cached in `summaries-cache.json`.
-8. `Consolidator` creates a `ConsolidatedSummary`: total posts, topic count, one dataset overview, and all per-cluster summaries. `KnowledgeBase` writes it to `knowledge-base.json`.
+8. `Consolidator` creates a `ConsolidatedSummary`: total posts, cluster count, one dataset overview, and all per-cluster summaries. `KnowledgeBase` writes it to `knowledge-base.json`.
 9. When configured, `DatabasePipeline` mirrors the same stage outputs to MySQL. It must not transform the analytical objects before storage.
 
 Default algorithm parameters:
@@ -110,10 +112,10 @@ One row per accepted CSV occurrence per run.
 - `source_post_id` is the content-hash ID; repeated identical occurrences receive `#2`, `#3`, and so on to satisfy uniqueness without changing `Post` identity.
 - `normalized_text` contains the exact text processed by the current pipeline despite its historical column name.
 - `embedding` contains the vector as JSON.
-- `topic_cluster_id` points to `AGENT_clusters.id` and may be null for unfinished or failed processing.
+- `cluster_id` points to `AGENT_clusters.id` and may be null for unfinished or failed processing.
 - Normal successful statuses progress through `PENDING`, `EMBEDDED`, and `CLUSTERED`.
 
-Deleting a pipeline run cascades to its clusters and processing rows. Deleting a cluster sets referencing `topic_cluster_id` values to null.
+Deleting a pipeline run cascades to its clusters and processing rows. Deleting a cluster sets referencing `cluster_id` values to null.
 
 ### Database configuration
 
@@ -134,12 +136,12 @@ Migration `V3__create_chat_tables.sql` adds the two online-only tables:
 - `AGENT_chat_sessions`: one UUID-keyed conversation with optional external `user_id`, status,
   one immutable `pipeline_run_id`, and lifecycle timestamps.
 - `AGENT_chat_messages`: ordered user and assistant messages. Assistant rows also store the
-  topic IDs, sources, research log, elapsed time, model, and attempt status.
+  cluster IDs, sources, research log, elapsed time, model, and attempt status.
 
 Migration `V4__bind_chat_sessions_to_pipeline_run.sql` moves preprocessing-run ownership from
 individual assistant messages to the session. Every persisted conversation therefore stays on
 one knowledge-base snapshot. `AGENT_chat_sessions.pipeline_run_id` references
-`AGENT_pipeline_runs.id`, and its topics are the rows whose `PreProcessing_run_id` matches it.
+`AGENT_pipeline_runs.id`, and its clusters are the rows whose `PreProcessing_run_id` matches it.
 
 `POST /chat` accepts optional `sessionId` and `userId`. With database configuration, omitting
 `sessionId` creates a session for the requested `pipelineRunId` and returns its ID; subsequent
@@ -171,12 +173,10 @@ LLM and embedding calls can cost money. Unit tests must remain offline. Do not r
 
 Entry point: `com.leadspotnic.web.Server`; port `7070`.
 
-- `GET /status`: readiness, total post count, and topic count.
+- `GET /status`: readiness, total post count, and cluster count.
 - `GET /runs`: completed summarized preprocessing runs available for chat selection.
-- `GET /topics`: cluster IDs, post counts, and each cluster's `what` summary; accepts a
-  `pipelineRunId` query parameter.
 - `POST /chat`: accepts
-  `{"query":"...","topicIds":[],"sessionId":null,"userId":null,"pipelineRunId":123}` and
+  `{"query":"...","sessionId":null,"userId":null,"pipelineRunId":123}` and
   returns the session ID, answer, elapsed time, sources, and research log.
 
 The server loads original posts separately because the three pipeline AGENT tables do not store

@@ -3,7 +3,7 @@ package com.leadspotnic.web;
 import com.leadspotnic.agent.Agent;
 import com.leadspotnic.agent.PostIndex;
 import com.leadspotnic.agent.PostStore;
-import com.leadspotnic.agent.TopicIndex;
+import com.leadspotnic.agent.ClusterIndex;
 import com.leadspotnic.cluster.Embedder;
 import com.leadspotnic.persistence.AgentDatabase;
 import com.leadspotnic.persistence.DatabaseConfig;
@@ -46,7 +46,7 @@ final class ChatRunService {
     private List<AgentDatabase.AvailableRun> fallbackRunList() {
         RunContext context = contexts.get(defaultRunId);
         return List.of(new AgentDatabase.AvailableRun(defaultRunId, null, null,
-                context.knowledgeBase().totalPosts(), context.knowledgeBase().topicCount()));
+                context.knowledgeBase().totalPosts(), context.knowledgeBase().clusterCount()));
     }
 
     RunContext context(long runId) throws RunUnavailableException {
@@ -73,16 +73,16 @@ final class ChatRunService {
             throw new IllegalStateException("Pipeline run " + runId + " has incomplete embeddings");
         }
         Embedder embedder = new Embedder();
-        TopicIndex topics = new TopicIndex(run.knowledgeBase(), embedder);
+        ClusterIndex clusters = new ClusterIndex(run.knowledgeBase(), embedder);
         PostIndex postIndex = new PostIndex(posts, embedder);
-        Agent agent = new Agent(run.knowledgeBase(), topics, run.extractions(), posts, postIndex);
+        Agent agent = new Agent(run.knowledgeBase(), clusters, run.extractions(), posts, postIndex);
         System.out.println("Chat: loaded selectable pipeline run " + runId);
-        return new RunContext(runId, run.knowledgeBase(), topics, agent);
+        return new RunContext(runId, run.knowledgeBase(), clusters, agent);
     }
 
     record RunContext(long pipelineRunId,
                       com.leadspotnic.model.ConsolidatedSummary knowledgeBase,
-                      TopicIndex topics,
+                      ClusterIndex clusters,
                       Agent agent) {}
 
     static final class RunUnavailableException extends Exception {

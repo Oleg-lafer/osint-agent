@@ -40,7 +40,7 @@ public class Extractor {
 
     interface Analyst {
         @SystemMessage("""
-                You extract entities from the posts of one topic cluster and cite the posts they
+                You extract entities from the posts of one generated cluster and cite the posts they
                 come from. Rules:
                 - Use ONLY the numbered posts given. Cite each entity's posts by their numbers.
                 - Do not invent entities or post numbers. Answer in English.

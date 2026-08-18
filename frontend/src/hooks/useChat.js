@@ -13,14 +13,14 @@ export function useChat() {
   const [sessionId, setSessionId] = useState(null);
 
   const send = useCallback(
-    async (raw, topicIds = [], pipelineRunId = null) => {
+    async (raw, pipelineRunId = null) => {
       const question = raw.trim();
       if (!question || loading) return;
 
       setMessages((prev) => [...prev, { id: nextId++, role: "user", text: question }]);
       setLoading(true);
       try {
-        const result = await sendChat(question, topicIds, sessionId, pipelineRunId);
+        const result = await sendChat(question, sessionId, pipelineRunId);
         const { answer, sources, researchLog } = result;
         setSessionId(result.sessionId ?? null);
         setMessages((prev) => [

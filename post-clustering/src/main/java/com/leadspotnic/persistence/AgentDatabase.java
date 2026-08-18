@@ -171,7 +171,7 @@ public final class AgentDatabase implements AutoCloseable {
                 """;
         String assign = """
                 UPDATE AGENT_post_processing
-                SET topic_cluster_id = ?, processing_status = 'CLUSTERED'
+                SET cluster_id = ?, processing_status = 'CLUSTERED'
                 WHERE id = ?
                 """;
         Map<Integer, Long> clusterRows = new LinkedHashMap<>();
@@ -188,7 +188,7 @@ public final class AgentDatabase implements AutoCloseable {
                     clusterStatement.executeUpdate();
                     try (ResultSet keys = clusterStatement.getGeneratedKeys()) {
                         if (!keys.next()) {
-                            throw new SQLException("MySQL did not return a topic-cluster id");
+                            throw new SQLException("MySQL did not return a cluster id");
                         }
                         long clusterRow = keys.getLong(1);
                         clusterRows.put(number, clusterRow);
@@ -258,7 +258,7 @@ public final class AgentDatabase implements AutoCloseable {
 
     public DatabaseRun loadRun(Long requestedRunId) throws Exception {
         RunHeader header = findRun(requestedRunId);
-        List<ConsolidatedSummary.TopicEntry> topics = new ArrayList<>();
+        List<ConsolidatedSummary.ClusterEntry> clusters = new ArrayList<>();
         List<ClusterExtraction> extractions = new ArrayList<>();
 
         String clusterSql = """
@@ -274,7 +274,7 @@ public final class AgentDatabase implements AutoCloseable {
                     int clusterNumber = rows.getInt("cluster_number");
                     ClusterSummary summary = JSON.readValue(
                             rows.getString("cluster_summary"), ClusterSummary.class);
-                    topics.add(new ConsolidatedSummary.TopicEntry(
+                    clusters.add(new ConsolidatedSummary.ClusterEntry(
                             clusterNumber, rows.getInt("post_count"), summary));
                     String extractionJson = rows.getString("entities_and_evidence");
                     if (extractionJson != null) {
@@ -283,8 +283,8 @@ public final class AgentDatabase implements AutoCloseable {
                 }
             }
         }
-        if (topics.isEmpty()) {
-            throw new IllegalStateException("Pipeline run " + header.id() + " has no summarized topics");
+        if (clusters.isEmpty()) {
+            throw new IllegalStateException("Pipeline run " + header.id() + " has no summarized clusters");
         }
 
         int totalPosts;
@@ -299,7 +299,7 @@ public final class AgentDatabase implements AutoCloseable {
 
         Map<Long, float[]> embeddings = loadEmbeddings(header.id());
         ConsolidatedSummary kb = new ConsolidatedSummary(
-                totalPosts, topics.size(), header.overview(), topics);
+                totalPosts, clusters.size(), header.overview(), clusters);
         return new DatabaseRun(header.id(), header.postGroupId(), kb, List.copyOf(extractions),
                 Map.copyOf(embeddings), header.csvPath());
     }
@@ -396,7 +396,7 @@ public final class AgentDatabase implements AutoCloseable {
                 SELECT runs.id, runs.post_group_id, runs.completed_at,
                        (SELECT COUNT(*) FROM AGENT_clusters clusters
                         WHERE clusters.PreProcessing_run_id = runs.id
-                          AND clusters.cluster_summary IS NOT NULL) AS topic_count,
+                          AND clusters.cluster_summary IS NOT NULL) AS cluster_count,
                        (SELECT COUNT(*) FROM AGENT_post_processing posts
                         WHERE posts.pipeline_run_id = runs.id) AS post_count
                 FROM AGENT_pipeline_runs runs
@@ -413,7 +413,7 @@ public final class AgentDatabase implements AutoCloseable {
                 Timestamp completed = rows.getTimestamp("completed_at");
                 runs.add(new AvailableRun(rows.getLong("id"), rows.getString("post_group_id"),
                         completed == null ? null : completed.toInstant(), rows.getInt("post_count"),
-                        rows.getInt("topic_count")));
+                        rows.getInt("cluster_count")));
             }
         }
         return List.copyOf(runs);
@@ -488,7 +488,7 @@ public final class AgentDatabase implements AutoCloseable {
     private record RunHeader(long id, String postGroupId, String overview, String csvPath) {}
 
     public record AvailableRun(long id, String postGroupId, Instant completedAt,
-                               int postCount, int topicCount) {}
+                               int postCount, int clusterCount) {}
 
     @FunctionalInterface
     private interface SqlWork {

@@ -11,8 +11,8 @@ import java.util.List;
 /**
  * Task 3: semantic search over the individual posts.
  *
- * The sibling of TopicIndex — same embed-then-rank-by-cosine retrieval — but over the 5,402
- * posts instead of the ~142 topic summaries. It is the fallback the agent uses when a question
+ * The sibling of ClusterIndex — same embed-then-rank-by-cosine retrieval — but over the posts
+ * instead of the generated cluster summaries. It is the fallback the agent uses when a question
  * is about something no entity captured: there are no post ids to drill into, so we search the
  * raw posts by meaning instead.
  *

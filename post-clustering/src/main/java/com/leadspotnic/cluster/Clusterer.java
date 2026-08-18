@@ -16,7 +16,7 @@ import java.util.Random;
  *
  * Leiden looks for groups of nodes that are more densely connected to each other than to
  * the rest of the graph. On this graph, "densely connected" means "these posts are all
- * about the same thing" — so a community is a topic.
+ * about related things, so each community becomes a generated cluster.
  *
  * This uses the reference implementation from CWTS, written by the authors of the Leiden
  * paper. Leiden is the successor to Louvain and exists because Louvain could return
@@ -24,7 +24,7 @@ import java.util.Random;
  */
 public class Clusterer {
 
-    /** How many clusters you get. Higher = more, smaller, tighter topics. */
+    /** How many clusters you get. Higher means more, smaller, tighter clusters. */
     private final double resolution;
 
     /** Leiden restarts and refines; more iterations, more stable output. */

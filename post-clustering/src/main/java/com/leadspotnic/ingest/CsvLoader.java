@@ -104,10 +104,10 @@ public class CsvLoader {
                 String text = get(record, "text");
 
                 // Normalised once and used for both checks below: "hi   there" and
-                // "hi there" are the same post as far as topic clustering cares.
+                // "hi there" are the same post as far as clustering cares.
                 String normalised = text.replaceAll("\\s+", " ").trim();
 
-                // A single emoji or a bare name carries no topic. Left in, these posts
+                // A single emoji or a bare name carries too little clustering signal. Left in, these posts
                 // embed to near-arbitrary directions, and Leiden either collects them
                 // into a junk cluster or smears them through the real ones.
                 if (normalised.length() < options.minTextLength()) {

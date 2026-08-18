@@ -25,7 +25,7 @@ class ChatDatabaseIntegrationTest {
         String sessionId = chats.createSession("integration-test", runId);
         try {
             assertEquals(runId, chats.loadSession(sessionId).pipelineRunId());
-            long assistantId = chats.beginTurn(sessionId, "Synthetic question", List.of());
+            long assistantId = chats.beginTurn(sessionId, "Synthetic question");
             chats.completeTurn(assistantId, "Synthetic answer", 1, List.of(), List.of(), List.of());
 
             List<com.leadspotnic.agent.Agent.ChatMessage> history = chats.loadHistory(sessionId);
@@ -38,6 +38,12 @@ class ChatDatabaseIntegrationTest {
                  var columns = connection.getMetaData().getColumns(
                          connection.getCatalog(), null, "AGENT_chat_messages", "pipeline_run_id")) {
                 assertFalse(columns.next());
+            }
+            try (var connection = DriverManager.getConnection(
+                    config.jdbcUrl(), config.user(), config.password());
+                 var columns = connection.getMetaData().getColumns(
+                         connection.getCatalog(), null, "AGENT_chat_messages", "cluster_ids")) {
+                assertEquals(true, columns.next());
             }
         } finally {
             try (var connection = DriverManager.getConnection(

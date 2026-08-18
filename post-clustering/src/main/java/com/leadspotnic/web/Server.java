@@ -6,7 +6,7 @@ import com.leadspotnic.cluster.Embedder;
 import com.leadspotnic.summarize.KnowledgeBase;
 import com.leadspotnic.agent.PostIndex;
 import com.leadspotnic.agent.PostStore;
-import com.leadspotnic.agent.TopicIndex;
+import com.leadspotnic.agent.ClusterIndex;
 import com.leadspotnic.agent.Agent;
 import com.leadspotnic.persistence.AgentDatabase;
 import com.leadspotnic.persistence.DatabaseRun;
@@ -66,7 +66,7 @@ public class Server {
         ConsolidatedSummary kb = databaseRun
                 .map(DatabaseRun::knowledgeBase)
                 .orElseGet(Server::loadLocalKnowledgeBase);
-        TopicIndex index = new TopicIndex(kb, new Embedder());   // embeds the topic summaries
+        ClusterIndex index = new ClusterIndex(kb, new Embedder());
 
         // Task 3: also load the drill-down data — the entities (which carry post ids) and the
         // full posts (id -> text), so the agent can reach individual posts. The CSV is the same
@@ -148,7 +148,7 @@ public class Server {
             status.put("ready", true);
             status.put("pipelineRunId", selected.pipelineRunId());
             status.put("totalPosts", selected.knowledgeBase().totalPosts());
-            status.put("topicCount", selected.knowledgeBase().topicCount());
+            status.put("clusterCount", selected.knowledgeBase().clusterCount());
             ctx.contentType("application/json").result(status.toString());
         });
 
@@ -163,29 +163,9 @@ public class Server {
                 if (run.completedAt() == null) node.putNull("completedAt");
                 else node.put("completedAt", run.completedAt().toString());
                 node.put("postCount", run.postCount());
-                node.put("topicCount", run.topicCount());
+                node.put("clusterCount", run.clusterCount());
             }
             ctx.contentType("application/json").result(available.toString());
-        });
-
-        // The list of topics, for the frontend's topic picker.
-        app.get("/topics", ctx -> {
-            long requestedRun = queryRunId(ctx.queryParam("pipelineRunId"), runs.defaultRunId());
-            ChatRunService.RunContext selected;
-            try {
-                selected = runs.context(requestedRun);
-            } catch (ChatRunService.RunUnavailableException e) {
-                jsonError(ctx, 404, e.getMessage());
-                return;
-            }
-            ArrayNode topics = JSON.createArrayNode();
-            for (ConsolidatedSummary.TopicEntry topic : selected.knowledgeBase().topics()) {
-                ObjectNode node = topics.addObject();
-                node.put("clusterId", topic.clusterId());
-                node.put("postCount", topic.postCount());
-                node.put("what", topic.summary().what());
-            }
-            ctx.contentType("application/json").result(JSON.writeValueAsString(topics));
         });
 
         // The chat endpoint.
@@ -197,12 +177,6 @@ public class Server {
                 error.put("error", "query is required");
                 ctx.status(400).contentType("application/json").result(error.toString());
                 return;
-            }
-
-            // Optional: restrict the answer to the topics the user picked.
-            List<Integer> topicIds = new ArrayList<>();
-            for (JsonNode id : body.path("topicIds")) {
-                topicIds.add(id.asInt());
             }
 
             String requestedSessionId = body.path("sessionId").asText(null);
@@ -252,7 +226,7 @@ public class Server {
                             ? database.createSession(userId, selectedRunId)
                             : requestedSessionId;
                     history = database.loadHistory(sessionId);
-                    pendingAssistantId = database.beginTurn(sessionId, query, topicIds);
+                    pendingAssistantId = database.beginTurn(sessionId, query);
                 } catch (ChatDatabase.SessionNotFoundException e) {
                     jsonError(ctx, 404, e.getMessage());
                     return;
@@ -271,7 +245,7 @@ public class Server {
             long started = System.currentTimeMillis();
             Agent.Answer answer;
             try {
-                answer = selectedRun.agent().answer(query, topicIds, history);
+                answer = selectedRun.agent().answer(query, history);
             } catch (Exception e) {
                 if (pendingAssistantId != null) {
                     try {
@@ -292,11 +266,11 @@ public class Server {
             response.put("answer", answer.text());
             response.put("elapsedMs", elapsedMs);
             ArrayNode sources = response.putArray("sources");
-            for (TopicIndex.Match m : answer.sources()) {
+            for (ClusterIndex.Match m : answer.sources()) {
                 ObjectNode source = sources.addObject();
-                source.put("clusterId", m.topic().clusterId());
-                source.put("postCount", m.topic().postCount());
-                source.put("what", m.topic().summary().what());
+                source.put("clusterId", m.cluster().clusterId());
+                source.put("postCount", m.cluster().postCount());
+                source.put("what", m.cluster().summary().what());
                 source.put("score", Math.round(m.score() * 1000) / 1000.0);
             }
             ArrayNode researchLog = response.putArray("researchLog");
@@ -307,10 +281,10 @@ public class Server {
             }
             if (pendingAssistantId != null) {
                 try {
-                    List<Integer> matchedTopicIds = answer.sources().stream()
-                            .map(match -> match.topic().clusterId()).toList();
+                    List<Integer> matchedClusterIds = answer.sources().stream()
+                            .map(match -> match.cluster().clusterId()).toList();
                     chatDatabase.orElseThrow().completeTurn(
-                            pendingAssistantId, answer.text(), elapsedMs, matchedTopicIds,
+                            pendingAssistantId, answer.text(), elapsedMs, matchedClusterIds,
                             sources, researchLog);
                 } catch (Exception e) {
                     System.out.println("Chat persistence failed after answering: "

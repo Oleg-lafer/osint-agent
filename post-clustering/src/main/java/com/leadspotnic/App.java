@@ -35,7 +35,7 @@ import com.leadspotnic.summarize.Summarizer;
  * can still be run end to end.
  *
  * Usage:
- *   (no args)              the bundled toy CSV, whose four topics are known ground truth
+ *   (no args)              the bundled toy CSV, whose four groups are known ground truth
  *   <path/to/export.csv>   the real export
  *   --embed                fetch missing vectors from OpenAi (needs a key, costs money)
  *   --summarize            Step 2: summarise each cluster via OpenAi (needs a key, costs money)
@@ -72,7 +72,7 @@ public class App {
         // at all and Leiden had to leave them as singletons. Arabic embeddings may sit on a
         // different scale â€” check "posts with no neighbour" in the graph line before trusting it.
         double minSimilarity = doubleFlag(flags, "--min-sim=", 0.25);
-        // 1.0 is modularity's textbook default, but on this corpus it fused unrelated topics
+        // 1.0 is modularity's textbook default, but on this corpus it fused unrelated clusters
         // into a 1,007-post catch-all. 3.0 yields 43 clusters that hold up when you read them.
         double resolution = doubleFlag(flags, "--resolution=", 3.0);
         int maxClusterSize = intFlag(flags, "--max-cluster=", 100);

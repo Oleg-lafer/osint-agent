@@ -3,7 +3,7 @@ import Header from "./components/Header";
 import ChatWindow from "./components/ChatWindow";
 import Composer from "./components/Composer";
 import { useChat } from "./hooks/useChat";
-import { getRuns, getTopics } from "./api/client";
+import { getRuns } from "./api/client";
 import styles from "./App.module.css";
 
 export default function App() {
@@ -11,8 +11,6 @@ export default function App() {
   const [runs, setRuns] = useState([]);
   const [selectedRunId, setSelectedRunId] = useState(null);
   const [runsError, setRunsError] = useState(false);
-  const [topics, setTopics] = useState([]);
-  const [selectedTopics, setSelectedTopics] = useState([]);
 
   useEffect(() => {
     getRuns()
@@ -24,20 +22,6 @@ export default function App() {
       .catch(() => setRunsError(true));
   }, []);
 
-  useEffect(() => {
-    setSelectedTopics([]);
-    if (selectedRunId == null) {
-      setTopics([]);
-      return;
-    }
-    let current = true;
-    setTopics([]);
-    getTopics(selectedRunId)
-      .then((value) => current && setTopics(value))
-      .catch(() => current && setTopics([]));
-    return () => { current = false; };
-  }, [selectedRunId]);
-
   return (
     <div className={styles.app}>
       <Header
@@ -46,13 +30,10 @@ export default function App() {
         onSelectRun={setSelectedRunId}
         runSelectionLocked={messages.length > 0}
         runsError={runsError}
-        topics={topics}
-        selectedTopics={selectedTopics}
-        onSelectTopics={setSelectedTopics}
       />
       <ChatWindow messages={messages} loading={loading} />
       <Composer
-        onSend={(text) => send(text, selectedTopics, selectedRunId)}
+        onSend={(text) => send(text, selectedRunId)}
         disabled={loading || selectedRunId == null}
       />
     </div>

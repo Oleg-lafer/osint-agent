@@ -3,11 +3,11 @@ package com.leadspotnic.model;
 import java.util.List;
 
 /**
- * Task 2: one thing mentioned inside a cluster — a topic, a person/organization, or a location —
+ * Task 2: one thing mentioned inside a cluster — a subject, a person/organization, or a location —
  * with the exact posts that mention it.
  *
  * One flexible shape covers all three categories:
- *   what  → name = the topic,           type = "topic",              context = a short summary
+ *   what  → name = the subject,         type = "subject",            context = a short summary
  *   who   → name = the person/org,      type = "person"/"organization", context = how mentioned
  *   where → name = the place,           type = "city"/"region"/…,    context = why mentioned
  *

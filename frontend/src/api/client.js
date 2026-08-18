@@ -10,14 +10,6 @@ export async function getStatus(pipelineRunId = null) {
   return res.json();
 }
 
-/** GET /topics — the list of topics, for the picker. */
-export async function getTopics(pipelineRunId = null) {
-  const query = pipelineRunId == null ? "" : `?pipelineRunId=${encodeURIComponent(pipelineRunId)}`;
-  const res = await fetch(`${API_BASE}/topics${query}`);
-  if (!res.ok) throw new Error(`topics request failed (${res.status})`);
-  return res.json();
-}
-
 /** GET /runs — completed preprocessing runs that can back a chat session. */
 export async function getRuns() {
   const res = await fetch(`${API_BASE}/runs`);
@@ -27,13 +19,13 @@ export async function getRuns() {
 
 /**
  * POST /chat — send a question, get back { answer, sources, elapsedMs }.
- * topicIds optionally scopes the answer; pipelineRunId selects the immutable knowledge snapshot.
+ * pipelineRunId selects the immutable knowledge snapshot.
  */
-export async function sendChat(query, topicIds = [], sessionId = null, pipelineRunId = null) {
+export async function sendChat(query, sessionId = null, pipelineRunId = null) {
   const res = await fetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, topicIds, sessionId, pipelineRunId }),
+    body: JSON.stringify({ query, sessionId, pipelineRunId }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

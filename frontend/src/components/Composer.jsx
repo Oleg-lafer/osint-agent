@@ -56,7 +56,7 @@ export default function Composer({ onSend, disabled }) {
         </button>
       </div>
       <p className={styles.hint}>
-        High-level questions answer from the summary · specific ones search the topics
+        High-level questions use the overview · specific ones search the clusters and posts
       </p>
     </form>
   );

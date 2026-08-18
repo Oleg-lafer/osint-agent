@@ -35,7 +35,7 @@ public class Embedder {
      * characters stays clear of the ceiling.
      *
      * This truncates only what we *send*; Post keeps its full text. It affects 9 of 5,402
-     * posts, and a post's topic is established long before its 6,000th character â€” which is
+     * posts, and a post's cluster signal is established long before its 6,000th character, which is
      * all the clustering needs from it.
      */
     private static final int MAX_CHARS = 6_000;
@@ -117,7 +117,7 @@ public class Embedder {
     /**
      * Embeds a single piece of text and returns its unit vector.
      *
-     * Used in Step 4: once per topic to build the search index, and once per user query to
+     * Used in Step 4: once per cluster to build the search index, and once per user query to
      * look it up. Same model and scale as the post embeddings, so the vectors are comparable.
      */
     public float[] embed(String text) throws IOException, InterruptedException {

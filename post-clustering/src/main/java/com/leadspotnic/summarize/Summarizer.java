@@ -36,7 +36,7 @@ import java.util.Map;
  */
 public class Summarizer {
 
-    /** Step 2.5: how many of a cluster's posts to actually send. The rest just repeat the topic. */
+    /** Step 2.5: how many of a cluster's posts to send. The rest are usually repetitive. */
     private static final int SAMPLE_SIZE = 20;
 
     private static final Path CACHE_FILE = Path.of("summaries-cache.json");

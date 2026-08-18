@@ -12,12 +12,12 @@ import java.util.stream.IntStream;
  * Step 1.6: turns a pile of vectors into a graph, which is what Leiden actually consumes.
  *
  * Every post becomes a node. Two posts get an edge if they are among each other's most
- * similar posts, weighted by how similar they are. Dense regions of that graph are topics.
+ * similar posts, weighted by how similar they are. Dense regions become generated clusters.
  *
  * Why k-nearest-neighbours rather than "an edge between every pair above a threshold":
  * a threshold alone is a single global knob, and post similarity isn't globally calibrated —
- * a tight topic like football sits at 0.7 while a diffuse one like politics sits at 0.45.
- * One threshold either fragments the diffuse topics or fuses the tight ones. Taking each
+ * a tight group like football sits at 0.7 while a diffuse one like politics sits at 0.45.
+ * One threshold either fragments diffuse groups or fuses tight ones. Taking each
  * post's top k neighbours instead lets every post connect to its own neighbourhood, and the
  * threshold then only serves to cut genuinely unrelated pairs.
  */
@@ -106,7 +106,7 @@ public class SimilarityGraph {
 
         // "i lists j" and "j lists i" are the same undirected edge, so keep it once.
         // Symmetrising by union rather than intersection matters: a post on the edge of a
-        // topic may name a hub post as its neighbour without the hub naming it back, and
+        // a group may name a hub post as its neighbour without the hub naming it back, and
         // dropping that edge would strand the post as a singleton.
         List<Edge> edges = new ArrayList<>();
         HashSet<Long> seen = new HashSet<>();

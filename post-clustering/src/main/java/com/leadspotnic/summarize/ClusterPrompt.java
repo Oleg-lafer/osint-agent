@@ -19,12 +19,12 @@ public final class ClusterPrompt {
         // Utility holder: never instantiated.
     }
 
-    /** Long post bodies cost tokens without changing the topic, so each is capped. */
+    /** Long post bodies cost tokens without changing the cluster summary, so each is capped. */
     private static final int MAX_POST_CHARS = 500;
 
     public static final String INSTRUCTIONS = """
             You are analyzing a group of social-media posts that were automatically
-            grouped together because they share a topic. Read the posts below and
+            grouped together because they are related. Read the posts below and
             answer four questions about the group as a whole:
 
               who   - the people or organizations the posts are about

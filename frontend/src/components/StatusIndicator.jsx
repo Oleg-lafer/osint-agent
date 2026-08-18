@@ -33,7 +33,7 @@ export default function StatusIndicator({ pipelineRunId }) {
       <span className={styles.dot} />
       Dataset processed
       <span className={styles.meta}>
-        · {status.totalPosts.toLocaleString()} posts · {status.topicCount} topics
+        · {status.totalPosts.toLocaleString()} posts · {status.clusterCount} clusters
       </span>
     </span>
   );
