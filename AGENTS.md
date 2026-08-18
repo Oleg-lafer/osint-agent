@@ -78,19 +78,25 @@ Database: MySQL on AWS RDS. Default schema: `leadspot_main`.
 
 One row per pipeline execution. Stores status, embedding model, CLI parameters and CSV path, consolidated overview, timestamps, and any failure message.
 
+- `id`: unique preprocessing execution identity (the `PreProcessing_run_id` referenced by clusters).
+- `post_group_id`: logical post-set identity. Separate executions over the same post set reuse this
+  value while retaining different `id` values. New runs accept `--post-group-id=<value>`, then
+  fall back to `POST_GROUP_ID`; when neither is supplied, a new UUID prevents accidental grouping.
+  Rows created before this field was introduced remain null because their grouping is unknown.
+
 Expected lifecycle: `RUNNING` to `COMPLETED` or `FAILED`.
 
 ### `AGENT_clusters`
 
 One row per final cluster, after oversized-cluster splitting.
 
-- `pipeline_run_id`: owning run.
+- `PreProcessing_run_id`: owning run; foreign key to `AGENT_pipeline_runs.id`.
 - `cluster_number`: cluster identity within the run.
 - `post_count`: declared number of assigned posts.
 - `cluster_summary`: complete serialized `ClusterSummary` JSON.
 - `entities_and_evidence`: complete serialized `ClusterExtraction` JSON.
 
-The pair `(pipeline_run_id, cluster_number)` is unique.
+The pair `(PreProcessing_run_id, cluster_number)` is unique.
 
 ### `AGENT_post_processing`
 
@@ -112,6 +118,7 @@ Set `DB_CREDENTIALS_FILE` to a file containing `host`, `user`, and `password`. O
 - `DB_NAME` (default `leadspot_main`)
 - `DB_PORT` (default `3306`)
 - `AGENT_PIPELINE_RUN_ID` (server: select a specific completed summarized run)
+- `POST_GROUP_ID` (pipeline: reusable logical post-group identifier; CLI `--post-group-id` wins)
 - `WATCH_LIST_ID` (source query; default `1406`)
 - `POST_LOOKBACK_DAYS` (source query; default `14`)
 - `POST_LIMIT` (maximum newest source rows; development default `5`)
@@ -152,7 +159,10 @@ When database embedding coverage does not cover every CSV post, the server uses 
 
 On Windows, start the backend and frontend together from the repository root. The launcher
 checks prerequisites, installs frontend dependencies when needed, waits for backend readiness,
-and stops both services on Ctrl+C:
+and stops both services on Ctrl+C. It defaults `DB_CREDENTIALS_FILE` to the gitignored
+`KEYS_AND_CREDENTIALS/DataBase_Credentials.txt` when the variable is unset and enables strict
+database-only mode. Startup fails instead of reading local CSV, JSON, or embedding caches if
+the selected run or its source data is unavailable or incomplete:
 
 ```powershell
 .\start-app.ps1
@@ -172,6 +182,9 @@ mvn -q compile exec:java "-Dexec.args=--embed --extract --summarize"
 
 # Full pipeline with an explicit CSV
 mvn -q compile exec:java "-Dexec.args=C:\path\to\posts.csv --embed --extract --summarize"
+
+# A second independent execution for the same logical post group reuses this value
+mvn -q compile exec:java "-Dexec.args=--post-group-id=group-A --embed --extract --summarize"
 
 # Chat server
 mvn -q compile exec:java "-Dexec.mainClass=com.leadspotnic.web.Server"

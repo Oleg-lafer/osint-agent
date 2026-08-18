@@ -17,6 +17,66 @@ function Require-Command {
     }
 }
 
+function Require-AvailablePort {
+    param([Parameter(Mandatory)][int]$Port, [Parameter(Mandatory)][string]$Label)
+
+    $listener = [System.Net.Sockets.TcpListener]::new(
+        [System.Net.IPAddress]::Loopback, $Port)
+    try {
+        $listener.Start()
+    } catch {
+        throw "$Label port $Port is already in use. Stop the existing process and try again."
+    } finally {
+        $listener.Stop()
+    }
+}
+
+function Stop-StaleAppOnPort {
+    param(
+        [Parameter(Mandatory)][int]$Port,
+        [Parameter(Mandatory)][string]$Label,
+        [Parameter(Mandatory)][string]$CommandMarker
+    )
+
+    $connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    if ($connections.Count -eq 0) { return }
+
+    foreach ($connection in $connections) {
+        $processId = $connection.OwningProcess
+        $currentId = $processId
+        $commandLines = @()
+        for ($depth = 0; $depth -lt 6 -and $currentId -gt 0; $depth++) {
+            $processInfo = Get-CimInstance Win32_Process -Filter "ProcessId=$currentId" `
+                -ErrorAction SilentlyContinue
+            if ($null -eq $processInfo) { break }
+            $commandLines += [string]$processInfo.CommandLine
+            $currentId = $processInfo.ParentProcessId
+        }
+
+        $processDescription = $commandLines -join "`n"
+        if ($processDescription -notlike "*$repoRoot*" -or
+                $processDescription -notlike "*$CommandMarker*") {
+            throw "$Label port $Port is already used by an unrelated process (PID $processId)."
+        }
+
+        Write-Host "Stopping stale $Label process on port $Port..."
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'SilentlyContinue'
+        & taskkill.exe /PID $processId /T /F 2>$null | Out-Null
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $deadline = (Get-Date).AddSeconds(5)
+    do {
+        Start-Sleep -Milliseconds 200
+        $remaining = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    } while ($remaining.Count -gt 0 -and (Get-Date) -lt $deadline)
+
+    if ($remaining.Count -gt 0) {
+        throw "Could not stop the stale $Label process on port $Port."
+    }
+}
+
 function Stop-ProcessTree {
     param([System.Diagnostics.Process]$Process, [string]$Label)
 
@@ -50,6 +110,22 @@ try {
     foreach ($command in @('java', 'mvn', 'node', 'npm')) {
         Require-Command $command
     }
+
+    if (-not $env:DB_CREDENTIALS_FILE) {
+        $env:DB_CREDENTIALS_FILE = Join-Path $repoRoot 'KEYS_AND_CREDENTIALS\DataBase_Credentials.txt'
+    }
+    if (-not (Test-Path -LiteralPath $env:DB_CREDENTIALS_FILE -PathType Leaf)) {
+        throw 'Database credentials file is missing. Set DB_CREDENTIALS_FILE to a valid file.'
+    }
+    if ($env:POSTS_CSV) {
+        throw 'POSTS_CSV must be unset: this launcher enforces database-only mode.'
+    }
+    $env:DATABASE_ONLY = 'true'
+    Write-Host 'Database-only mode enabled; all local data fallbacks are disabled.'
+    Stop-StaleAppOnPort 7070 'backend' 'com.leadspotnic.web.Server'
+    Stop-StaleAppOnPort 5173 'frontend' 'node_modules\vite'
+    Require-AvailablePort 7070 'Backend'
+    Require-AvailablePort 5173 'Frontend'
 
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
     $backendOut = Join-Path $logDir 'backend.log'
@@ -100,7 +176,7 @@ try {
         throw 'Backend did not become ready at http://localhost:7070/status within 120 seconds.'
     }
 
-    Write-Host 'Backend: http://localhost:7070' -ForegroundColor Green
+    Write-Host 'Backend: http://localhost:7070 (MySQL only)' -ForegroundColor Green
     Write-Host 'Starting frontend; output is being written to .app-logs/frontend*.log...'
     $frontendAddress = 'http://localhost:5173'
     $frontendProcess = Start-Process -FilePath 'npm.cmd' `

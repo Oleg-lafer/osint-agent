@@ -43,7 +43,19 @@ public class Server {
     private static final String DEFAULT_POSTS_CSV = "src/main/resources/posts.csv";
 
     public static void main(String[] args) throws Exception {
-        Optional<DatabaseRun> databaseRun = AgentDatabase.tryLoadPreferredRun();
+        boolean databaseOnly = envBoolean("DATABASE_ONLY");
+        Optional<DatabaseRun> databaseRun = databaseOnly
+                ? Optional.of(AgentDatabase.loadRequiredRun())
+                : AgentDatabase.tryLoadPreferredRun();
+
+        if (databaseOnly && hasExplicitCsv(args)) {
+            throw new IllegalStateException(
+                    "POSTS_CSV and CSV arguments are forbidden in database-only mode");
+        }
+        if (databaseOnly && databaseRun.orElseThrow().csvPath() != null) {
+            throw new IllegalStateException("Database-only mode requires a database-sourced pipeline run; run "
+                    + databaseRun.orElseThrow().id() + " was created from CSV");
+        }
 
         // The posts CSV is configuration, not code: a command-line argument wins, else the
         // POSTS_CSV environment variable, then the selected run's recorded path, then the default.
@@ -64,6 +76,10 @@ public class Server {
         Optional<DatabaseConfig> sourceConfig = DatabaseConfig.fromEnvironment();
         boolean useDatabasePosts = !hasExplicitCsv(args) && sourceConfig.isPresent()
                 && databaseRun.map(DatabaseRun::csvPath).orElse(null) == null;
+        if (databaseOnly && !useDatabasePosts) {
+            throw new IllegalStateException(
+                    "Database-only mode could not select post_qualification as the post source");
+        }
         PostStore posts;
         if (useDatabasePosts) {
             int watchListId = envInt("WATCH_LIST_ID", PostQualificationLoader.DEFAULT_WATCH_LIST_ID);
@@ -81,6 +97,10 @@ public class Server {
         if (databaseRun.isPresent()) {
             boolean complete = AgentDatabase.applyEmbeddingsIfComplete(
                     posts.all(), databaseRun.get().embeddings());
+            if (databaseOnly && !complete) {
+                throw new IllegalStateException("Database-only mode requires a database embedding for every "
+                        + "loaded post; local embedding-cache fallback is disabled");
+            }
             System.out.println(complete
                     ? "Database: applied all post embeddings for the selected run"
                     : "Database: embedding coverage is incomplete; using the local cache");
@@ -88,6 +108,11 @@ public class Server {
         PostIndex postIndex = new PostIndex(posts, new Embedder());   // vectors from cache, offline
         System.out.printf("Loaded %d entities' clusters and %d posts for drill-down.%n",
                 entities.size(), posts.size());
+        if (databaseOnly) {
+            System.out.println("Data source: MySQL only");
+            System.out.println("Database run: " + databaseRun.orElseThrow().id());
+            System.out.println("Local fallback: disabled");
+        }
 
         Agent agent = new Agent(kb, index, entities, posts, postIndex);
 
@@ -199,6 +224,11 @@ public class Server {
     private static int envInt(String name, int fallback) {
         String value = System.getenv(name);
         return value == null || value.isBlank() ? fallback : Integer.parseInt(value.trim());
+    }
+
+    private static boolean envBoolean(String name) {
+        String value = System.getenv(name);
+        return value != null && (value.equalsIgnoreCase("true") || value.equals("1"));
     }
 
     private static ConsolidatedSummary loadLocalKnowledgeBase() {
