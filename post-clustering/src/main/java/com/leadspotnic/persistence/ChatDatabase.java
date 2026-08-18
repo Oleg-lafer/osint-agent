@@ -37,13 +37,17 @@ public final class ChatDatabase {
         }
     }
 
-    public String createSession(String userId) throws SQLException {
+    public String createSession(String userId, long pipelineRunId) throws SQLException {
         String id = UUID.randomUUID().toString();
-        String sql = "INSERT INTO AGENT_chat_sessions (id, user_id, status) VALUES (?, ?, 'ACTIVE')";
+        String sql = """
+                INSERT INTO AGENT_chat_sessions (id, user_id, pipeline_run_id, status)
+                VALUES (?, ?, ?, 'ACTIVE')
+                """;
         try (Connection connection = connection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, id);
             statement.setString(2, blankToNull(userId));
+            statement.setLong(3, pipelineRunId);
             statement.executeUpdate();
         }
         return id;
@@ -51,7 +55,7 @@ public final class ChatDatabase {
 
     /** Loads only completed messages and returns the newest bounded window chronologically. */
     public List<Agent.ChatMessage> loadHistory(String sessionId) throws SQLException {
-        requireActive(sessionId);
+        loadSession(sessionId);
         String sql = """
                 SELECT role, content FROM AGENT_chat_messages
                 WHERE session_id = ? AND status = 'COMPLETED' AND content IS NOT NULL
@@ -73,17 +77,16 @@ public final class ChatDatabase {
     }
 
     /** Atomically reserves consecutive sequence numbers for the user and assistant messages. */
-    public long beginTurn(String sessionId, String query, List<Integer> topicIds,
-                          Long pipelineRunId) throws Exception {
+    public long beginTurn(String sessionId, String query, List<Integer> topicIds) throws Exception {
         try (Connection connection = connection()) {
             connection.setAutoCommit(false);
             try {
                 lockActiveSession(connection, sessionId);
                 int next = nextSequence(connection, sessionId);
-                insertMessage(connection, sessionId, next, "USER", query, "COMPLETED", null,
+                insertMessage(connection, sessionId, next, "USER", query, "COMPLETED",
                         topicIds, null);
                 long assistantId = insertMessage(connection, sessionId, next + 1, "ASSISTANT", null,
-                        "PENDING", pipelineRunId, topicIds, OpenAi.CHAT_MODEL);
+                        "PENDING", topicIds, OpenAi.CHAT_MODEL);
                 try (PreparedStatement update = connection.prepareStatement(
                         "UPDATE AGENT_chat_sessions SET updated_at = ? WHERE id = ?")) {
                     update.setTimestamp(1, Timestamp.from(Instant.now()));
@@ -131,9 +134,9 @@ public final class ChatDatabase {
         }
     }
 
-    public void requireActive(String sessionId) throws SQLException {
+    public ChatSession loadSession(String sessionId) throws SQLException {
         try (Connection connection = connection()) {
-            requireActive(connection, sessionId, false);
+            return requireActive(connection, sessionId, false);
         }
     }
 
@@ -141,13 +144,15 @@ public final class ChatDatabase {
         requireActive(connection, sessionId, true);
     }
 
-    private void requireActive(Connection connection, String sessionId, boolean lock) throws SQLException {
-        String sql = "SELECT status FROM AGENT_chat_sessions WHERE id = ?" + (lock ? " FOR UPDATE" : "");
+    private ChatSession requireActive(Connection connection, String sessionId, boolean lock) throws SQLException {
+        String sql = "SELECT status, pipeline_run_id FROM AGENT_chat_sessions WHERE id = ?"
+                + (lock ? " FOR UPDATE" : "");
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, sessionId);
             try (ResultSet row = statement.executeQuery()) {
                 if (!row.next()) throw new SessionNotFoundException(sessionId);
                 if (!"ACTIVE".equals(row.getString("status"))) throw new SessionClosedException(sessionId);
+                return new ChatSession(sessionId, row.getLong("pipeline_run_id"));
             }
         }
     }
@@ -164,23 +169,21 @@ public final class ChatDatabase {
     }
 
     private static long insertMessage(Connection connection, String sessionId, int sequence,
-                                      String role, String content, String status, Long pipelineRunId,
+                                      String role, String content, String status,
                                       List<Integer> topicIds, String model) throws Exception {
         String sql = """
                 INSERT INTO AGENT_chat_messages
-                    (session_id, sequence_number, role, content, pipeline_run_id, topic_ids, model, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (session_id, sequence_number, role, content, topic_ids, model, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, sessionId);
             statement.setInt(2, sequence);
             statement.setString(3, role);
             statement.setString(4, content);
-            if (pipelineRunId == null) statement.setNull(5, java.sql.Types.BIGINT);
-            else statement.setLong(5, pipelineRunId);
-            statement.setString(6, JSON.writeValueAsString(topicIds == null ? List.of() : topicIds));
-            statement.setString(7, model);
-            statement.setString(8, status);
+            statement.setString(5, JSON.writeValueAsString(topicIds == null ? List.of() : topicIds));
+            statement.setString(6, model);
+            statement.setString(7, status);
             statement.executeUpdate();
             try (ResultSet keys = statement.getGeneratedKeys()) {
                 if (!keys.next()) throw new SQLException("MySQL did not return the chat message id");
@@ -209,4 +212,6 @@ public final class ChatDatabase {
     public static final class SessionClosedException extends SQLException {
         public SessionClosedException(String ignored) { super("Chat session is closed"); }
     }
+
+    public record ChatSession(String id, long pipelineRunId) {}
 }

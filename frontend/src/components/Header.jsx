@@ -1,8 +1,18 @@
 import StatusIndicator from "./StatusIndicator";
 import TopicPicker from "./TopicPicker";
+import RunPicker from "./RunPicker";
 import styles from "./Header.module.css";
 
-export default function Header({ topics, selectedTopics, onSelectTopics }) {
+export default function Header({
+  runs,
+  selectedRunId,
+  onSelectRun,
+  runSelectionLocked,
+  runsError,
+  topics,
+  selectedTopics,
+  onSelectTopics,
+}) {
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
@@ -13,8 +23,14 @@ export default function Header({ topics, selectedTopics, onSelectTopics }) {
         </div>
       </div>
       <div className={styles.right}>
+        <RunPicker
+          runs={runs}
+          selectedRunId={selectedRunId}
+          onChange={onSelectRun}
+          disabled={runSelectionLocked || runsError}
+        />
         <TopicPicker topics={topics} selected={selectedTopics} onChange={onSelectTopics} />
-        <StatusIndicator />
+        <StatusIndicator pipelineRunId={selectedRunId} />
       </div>
     </header>
   );

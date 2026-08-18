@@ -117,7 +117,9 @@ public class Server {
 
         Agent agent = new Agent(kb, index, entities, posts, postIndex);
         Optional<ChatDatabase> chatDatabase = ChatDatabase.fromEnvironment();
-        Long pipelineRunId = databaseRun.map(DatabaseRun::id).orElse(null);
+        long initialRunId = databaseRun.map(DatabaseRun::id).orElse(-1L);
+        ChatRunService runs = new ChatRunService(sourceConfig,
+                new ChatRunService.RunContext(initialRunId, kb, index, agent));
 
         // Enable CORS so the React frontend (served from a different port) can call these
         // endpoints — browsers block cross-origin requests unless the server allows them.
@@ -134,17 +136,50 @@ public class Server {
 
         // Data-source indicator: confirms the CSV has been processed and summarised.
         app.get("/status", ctx -> {
+            long requestedRun = queryRunId(ctx.queryParam("pipelineRunId"), runs.defaultRunId());
+            ChatRunService.RunContext selected;
+            try {
+                selected = runs.context(requestedRun);
+            } catch (ChatRunService.RunUnavailableException e) {
+                jsonError(ctx, 404, e.getMessage());
+                return;
+            }
             ObjectNode status = JSON.createObjectNode();
             status.put("ready", true);
-            status.put("totalPosts", kb.totalPosts());
-            status.put("topicCount", kb.topicCount());
+            status.put("pipelineRunId", selected.pipelineRunId());
+            status.put("totalPosts", selected.knowledgeBase().totalPosts());
+            status.put("topicCount", selected.knowledgeBase().topicCount());
             ctx.contentType("application/json").result(status.toString());
+        });
+
+        app.get("/runs", ctx -> {
+            ArrayNode available = JSON.createArrayNode();
+            for (AgentDatabase.AvailableRun run : runs.availableRuns()) {
+                ObjectNode node = available.addObject();
+                node.put("pipelineRunId", run.id());
+                node.put("isDefault", run.id() == runs.defaultRunId());
+                if (run.postGroupId() == null) node.putNull("postGroupId");
+                else node.put("postGroupId", run.postGroupId());
+                if (run.completedAt() == null) node.putNull("completedAt");
+                else node.put("completedAt", run.completedAt().toString());
+                node.put("postCount", run.postCount());
+                node.put("topicCount", run.topicCount());
+            }
+            ctx.contentType("application/json").result(available.toString());
         });
 
         // The list of topics, for the frontend's topic picker.
         app.get("/topics", ctx -> {
+            long requestedRun = queryRunId(ctx.queryParam("pipelineRunId"), runs.defaultRunId());
+            ChatRunService.RunContext selected;
+            try {
+                selected = runs.context(requestedRun);
+            } catch (ChatRunService.RunUnavailableException e) {
+                jsonError(ctx, 404, e.getMessage());
+                return;
+            }
             ArrayNode topics = JSON.createArrayNode();
-            for (ConsolidatedSummary.TopicEntry topic : kb.topics()) {
+            for (ConsolidatedSummary.TopicEntry topic : selected.knowledgeBase().topics()) {
                 ObjectNode node = topics.addObject();
                 node.put("clusterId", topic.clusterId());
                 node.put("postCount", topic.postCount());
@@ -172,18 +207,52 @@ public class Server {
 
             String requestedSessionId = body.path("sessionId").asText(null);
             String userId = body.path("userId").asText(null);
+            Long requestedRunId = body.hasNonNull("pipelineRunId")
+                    ? body.path("pipelineRunId").asLong() : null;
             String sessionId = null;
             Long pendingAssistantId = null;
             List<Agent.ChatMessage> history = List.of();
-            if (chatDatabase.isPresent()) {
+            long selectedRunId = requestedRunId == null ? runs.defaultRunId() : requestedRunId;
+            boolean persistenceUsable = chatDatabase.isPresent();
+
+            if (persistenceUsable && requestedSessionId != null && !requestedSessionId.isBlank()) {
+                try {
+                    ChatDatabase.ChatSession session = chatDatabase.orElseThrow()
+                            .loadSession(requestedSessionId);
+                    selectedRunId = session.pipelineRunId();
+                    if (requestedRunId != null && requestedRunId != selectedRunId) {
+                        jsonError(ctx, 409, "Chat session belongs to pipeline run " + selectedRunId);
+                        return;
+                    }
+                } catch (ChatDatabase.SessionNotFoundException e) {
+                    jsonError(ctx, 404, e.getMessage());
+                    return;
+                } catch (ChatDatabase.SessionClosedException e) {
+                    jsonError(ctx, 409, e.getMessage());
+                    return;
+                } catch (Exception e) {
+                    System.out.println("Chat persistence failed; answering statelessly: "
+                            + e.getClass().getSimpleName());
+                    persistenceUsable = false;
+                }
+            }
+
+            ChatRunService.RunContext selectedRun;
+            try {
+                selectedRun = runs.context(selectedRunId);
+            } catch (ChatRunService.RunUnavailableException e) {
+                jsonError(ctx, 404, e.getMessage());
+                return;
+            }
+
+            if (persistenceUsable) {
                 try {
                     ChatDatabase database = chatDatabase.get();
                     sessionId = requestedSessionId == null || requestedSessionId.isBlank()
-                            ? database.createSession(userId)
+                            ? database.createSession(userId, selectedRunId)
                             : requestedSessionId;
                     history = database.loadHistory(sessionId);
-                    pendingAssistantId = database.beginTurn(
-                            sessionId, query, topicIds, pipelineRunId);
+                    pendingAssistantId = database.beginTurn(sessionId, query, topicIds);
                 } catch (ChatDatabase.SessionNotFoundException e) {
                     jsonError(ctx, 404, e.getMessage());
                     return;
@@ -202,7 +271,7 @@ public class Server {
             long started = System.currentTimeMillis();
             Agent.Answer answer;
             try {
-                answer = agent.answer(query, topicIds, history);
+                answer = selectedRun.agent().answer(query, topicIds, history);
             } catch (Exception e) {
                 if (pendingAssistantId != null) {
                     try {
@@ -277,6 +346,15 @@ public class Server {
         ObjectNode error = JSON.createObjectNode();
         error.put("error", message);
         ctx.status(status).contentType("application/json").result(error.toString());
+    }
+
+    private static long queryRunId(String value, long fallback) {
+        if (value == null || value.isBlank()) return fallback;
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("pipelineRunId must be an integer");
+        }
     }
 
     private static boolean hasExplicitCsv(String[] args) {

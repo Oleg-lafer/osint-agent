@@ -39,10 +39,19 @@ public class Post {
     private int clusterId = -1;
 
     public Post(String profileName, String text, LocalDate publishDate) {
+        this(contentId(profileName, text, publishDate), profileName, text, publishDate);
+    }
+
+    private Post(long postId, String profileName, String text, LocalDate publishDate) {
         this.profileName = profileName;
         this.text = text;
         this.publishDate = publishDate;
-        this.postId = contentId(profileName, text, publishDate);
+        this.postId = postId;
+    }
+
+    /** Reconstructs an exactly identified post from an AGENT_post_processing row. */
+    public static Post persisted(long postId, String text) {
+        return new Post(postId, "Unknown author", text, null);
     }
 
     /** A stable id from the identifying fields, so the same post always hashes the same way. */

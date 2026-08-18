@@ -132,19 +132,29 @@ Set `DB_CREDENTIALS_FILE` to a file containing `host`, `user`, and `password`. O
 Migration `V3__create_chat_tables.sql` adds the two online-only tables:
 
 - `AGENT_chat_sessions`: one UUID-keyed conversation with optional external `user_id`, status,
-  and lifecycle timestamps.
+  one immutable `pipeline_run_id`, and lifecycle timestamps.
 - `AGENT_chat_messages`: ordered user and assistant messages. Assistant rows also store the
-  selected pipeline run, topic IDs, sources, research log, elapsed time, model, and attempt status.
+  topic IDs, sources, research log, elapsed time, model, and attempt status.
+
+Migration `V4__bind_chat_sessions_to_pipeline_run.sql` moves preprocessing-run ownership from
+individual assistant messages to the session. Every persisted conversation therefore stays on
+one knowledge-base snapshot. `AGENT_chat_sessions.pipeline_run_id` references
+`AGENT_pipeline_runs.id`, and its topics are the rows whose `PreProcessing_run_id` matches it.
 
 `POST /chat` accepts optional `sessionId` and `userId`. With database configuration, omitting
-`sessionId` creates a session and returns its ID; subsequent requests reuse it. The newest ten
+`sessionId` creates a session for the requested `pipelineRunId` and returns its ID; subsequent
+requests reuse it and cannot change its run. The newest ten
 completed transcript messages are included as untrusted context. Unknown and closed persisted
 sessions return 404 and 409 respectively. If chat persistence fails, the request is answered
 statelessly and returns a null session ID.
 
 Do not hard-code or print credentials. Do not commit machine-specific credential paths.
 
-The chat server selects the newest completed run containing an overview and summarized clusters unless `AGENT_PIPELINE_RUN_ID` is set. If loading is unavailable or unusable, it falls back to local files. For database-source runs it reloads drill-down posts from `post_qualification`; explicit CSV paths still take precedence.
+The chat server selects the newest completed run containing an overview and summarized clusters
+unless `AGENT_PIPELINE_RUN_ID` is set. If loading is unavailable or unusable, it falls back to
+local files. The initially selected database run reloads enriched drill-down posts from
+`post_qualification`; selectable historical runs use their exact persisted texts and embeddings
+from `AGENT_post_processing` so evidence cannot drift across preprocessing runs.
 
 ## OpenAI configuration
 
@@ -162,8 +172,11 @@ LLM and embedding calls can cost money. Unit tests must remain offline. Do not r
 Entry point: `com.leadspotnic.web.Server`; port `7070`.
 
 - `GET /status`: readiness, total post count, and topic count.
-- `GET /topics`: cluster IDs, post counts, and each cluster's `what` summary.
-- `POST /chat`: accepts `{"query":"...","topicIds":[],"sessionId":null,"userId":null}` and
+- `GET /runs`: completed summarized preprocessing runs available for chat selection.
+- `GET /topics`: cluster IDs, post counts, and each cluster's `what` summary; accepts a
+  `pipelineRunId` query parameter.
+- `POST /chat`: accepts
+  `{"query":"...","topicIds":[],"sessionId":null,"userId":null,"pipelineRunId":123}` and
   returns the session ID, answer, elapsed time, sources, and research log.
 
 The server loads original posts separately because the three pipeline AGENT tables do not store

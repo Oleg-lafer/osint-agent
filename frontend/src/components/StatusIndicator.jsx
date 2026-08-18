@@ -3,13 +3,16 @@ import { getStatus } from "../api/client";
 import styles from "./StatusIndicator.module.css";
 
 /** The data-source indicator: confirms the CSV has been processed and summarized. */
-export default function StatusIndicator() {
+export default function StatusIndicator({ pipelineRunId }) {
   const [status, setStatus] = useState(null);
   const [offline, setOffline] = useState(false);
 
   useEffect(() => {
-    getStatus().then(setStatus).catch(() => setOffline(true));
-  }, []);
+    if (pipelineRunId == null) return;
+    setStatus(null);
+    setOffline(false);
+    getStatus(pipelineRunId).then(setStatus).catch(() => setOffline(true));
+  }, [pipelineRunId]);
 
   if (offline) {
     return (

@@ -10,6 +10,14 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 class PostTest {
 
     @Test
+    void persistedPostKeepsItsDatabaseContentId() {
+        Post post = Post.persisted(123456789L, "Persisted text");
+
+        assertEquals(123456789L, post.getPostId());
+        assertEquals("Persisted text", post.getText());
+    }
+
+    @Test
     void identicalContentGetsTheSameId() {
         Post a = new Post("Alice", "hello world", LocalDate.of(2026, 1, 1));
         Post b = new Post("Alice", "hello world", LocalDate.of(2026, 1, 1));

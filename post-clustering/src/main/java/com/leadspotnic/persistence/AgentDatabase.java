@@ -390,6 +390,64 @@ public final class AgentDatabase implements AutoCloseable {
         }
     }
 
+    /** Completed summarized runs available to online chat, newest first. */
+    public List<AvailableRun> listAvailableRuns() throws SQLException {
+        String sql = """
+                SELECT runs.id, runs.post_group_id, runs.completed_at,
+                       (SELECT COUNT(*) FROM AGENT_clusters clusters
+                        WHERE clusters.PreProcessing_run_id = runs.id
+                          AND clusters.cluster_summary IS NOT NULL) AS topic_count,
+                       (SELECT COUNT(*) FROM AGENT_post_processing posts
+                        WHERE posts.pipeline_run_id = runs.id) AS post_count
+                FROM AGENT_pipeline_runs runs
+                WHERE runs.status = 'COMPLETED' AND runs.dataset_overview IS NOT NULL
+                  AND EXISTS (SELECT 1 FROM AGENT_clusters clusters
+                              WHERE clusters.PreProcessing_run_id = runs.id
+                                AND clusters.cluster_summary IS NOT NULL)
+                ORDER BY runs.completed_at DESC, runs.id DESC
+                """;
+        List<AvailableRun> runs = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rows = statement.executeQuery()) {
+            while (rows.next()) {
+                Timestamp completed = rows.getTimestamp("completed_at");
+                runs.add(new AvailableRun(rows.getLong("id"), rows.getString("post_group_id"),
+                        completed == null ? null : completed.toInstant(), rows.getInt("post_count"),
+                        rows.getInt("topic_count")));
+            }
+        }
+        return List.copyOf(runs);
+    }
+
+    /** Exact texts and embeddings persisted for a run, used by selectable historical agents. */
+    public List<Post> loadPostsForRun(long runId) throws Exception {
+        String sql = """
+                SELECT source_post_id, normalized_text, embedding
+                FROM AGENT_post_processing
+                WHERE pipeline_run_id = ?
+                ORDER BY id
+                """;
+        Map<Long, Post> posts = new LinkedHashMap<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, runId);
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    String sourceId = rows.getString("source_post_id");
+                    int suffix = sourceId.indexOf('#');
+                    long postId = Long.parseLong(suffix < 0 ? sourceId : sourceId.substring(0, suffix));
+                    String text = rows.getString("normalized_text");
+                    Post post = posts.computeIfAbsent(postId,
+                            ignored -> Post.persisted(postId, text));
+                    String embedding = rows.getString("embedding");
+                    if (embedding != null && post.getEmbedding() == null) {
+                        post.setEmbedding(JSON.readValue(embedding, float[].class));
+                    }
+                }
+            }
+        }
+        return List.copyOf(posts.values());
+    }
+
     /** Loads the selected database run without permitting the server's local-file fallback. */
     public static DatabaseRun loadRequiredRun() throws Exception {
         DatabaseConfig config = DatabaseConfig.fromEnvironment()
@@ -428,6 +486,9 @@ public final class AgentDatabase implements AutoCloseable {
     }
 
     private record RunHeader(long id, String postGroupId, String overview, String csvPath) {}
+
+    public record AvailableRun(long id, String postGroupId, Instant completedAt,
+                               int postCount, int topicCount) {}
 
     @FunctionalInterface
     private interface SqlWork {
