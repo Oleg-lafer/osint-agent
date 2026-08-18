@@ -20,11 +20,11 @@ export async function getTopics() {
  * POST /chat — send a question, get back { answer, sources, elapsedMs }.
  * topicIds (optional) scopes the answer to the topics the user picked.
  */
-export async function sendChat(query, topicIds = []) {
+export async function sendChat(query, topicIds = [], sessionId = null) {
   const res = await fetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, topicIds }),
+    body: JSON.stringify({ query, topicIds, sessionId }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

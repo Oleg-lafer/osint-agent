@@ -11,6 +11,9 @@ The repository contains:
 - `post-clustering/`: Java 17 backend, analysis pipeline, MySQL persistence, and Javalin API.
 - `frontend/`: React 19 + Vite chat interface.
 
+The online chat optionally persists conversational sessions and messages to MySQL. Persistence
+is best-effort: chat continues statelessly when the database is absent or unavailable.
+
 ## Core invariants
 
 - `post_qualification` is the default source when `DB_CREDENTIALS_FILE` is configured and no
@@ -19,7 +22,8 @@ The repository contains:
 - Local caches and JSON outputs must continue to be written when database persistence is enabled.
 - MySQL persistence is optional and best-effort. Missing configuration or a database failure must log a warning and allow local processing to continue.
 - Never commit API keys, database credentials, source datasets, generated caches, or generated knowledge-base files.
-- Do not modify company source-post tables. This project currently persists only to the three `AGENT_*` tables described below.
+- Do not modify company source-post tables. Offline processing persists only to the three pipeline
+  `AGENT_*` tables described below; online chat may use the two chat tables.
 - Preserve content-hash post IDs: evidence links and CSV-to-database matching depend on them.
 
 ## Pipeline and data flow
@@ -123,6 +127,21 @@ Set `DB_CREDENTIALS_FILE` to a file containing `host`, `user`, and `password`. O
 - `POST_LOOKBACK_DAYS` (source query; default `14`)
 - `POST_LIMIT` (maximum newest source rows; development default `5`)
 
+### Online chat persistence
+
+Migration `V3__create_chat_tables.sql` adds the two online-only tables:
+
+- `AGENT_chat_sessions`: one UUID-keyed conversation with optional external `user_id`, status,
+  and lifecycle timestamps.
+- `AGENT_chat_messages`: ordered user and assistant messages. Assistant rows also store the
+  selected pipeline run, topic IDs, sources, research log, elapsed time, model, and attempt status.
+
+`POST /chat` accepts optional `sessionId` and `userId`. With database configuration, omitting
+`sessionId` creates a session and returns its ID; subsequent requests reuse it. The newest ten
+completed transcript messages are included as untrusted context. Unknown and closed persisted
+sessions return 404 and 409 respectively. If chat persistence fails, the request is answered
+statelessly and returns a null session ID.
+
 Do not hard-code or print credentials. Do not commit machine-specific credential paths.
 
 The chat server selects the newest completed run containing an overview and summarized clusters unless `AGENT_PIPELINE_RUN_ID` is set. If loading is unavailable or unusable, it falls back to local files. For database-source runs it reloads drill-down posts from `post_qualification`; explicit CSV paths still take precedence.
@@ -144,9 +163,11 @@ Entry point: `com.leadspotnic.web.Server`; port `7070`.
 
 - `GET /status`: readiness, total post count, and topic count.
 - `GET /topics`: cluster IDs, post counts, and each cluster's `what` summary.
-- `POST /chat`: accepts `{"query":"...","topicIds":[...]}` and returns an answer, elapsed time, sources, and research log.
+- `POST /chat`: accepts `{"query":"...","topicIds":[],"sessionId":null,"userId":null}` and
+  returns the session ID, answer, elapsed time, sources, and research log.
 
-The server always loads original posts from CSV because the three AGENT tables do not store all author/date fields needed for drill-down. CSV resolution order is:
+The server loads original posts separately because the three pipeline AGENT tables do not store
+all author/date fields needed for drill-down. CSV resolution order is:
 
 1. First server command argument
 2. `POSTS_CSV`

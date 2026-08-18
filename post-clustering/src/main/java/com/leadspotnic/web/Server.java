@@ -11,6 +11,7 @@ import com.leadspotnic.agent.Agent;
 import com.leadspotnic.persistence.AgentDatabase;
 import com.leadspotnic.persistence.DatabaseRun;
 import com.leadspotnic.persistence.DatabaseConfig;
+import com.leadspotnic.persistence.ChatDatabase;
 import com.leadspotnic.ingest.PostQualificationLoader;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -115,6 +116,8 @@ public class Server {
         }
 
         Agent agent = new Agent(kb, index, entities, posts, postIndex);
+        Optional<ChatDatabase> chatDatabase = ChatDatabase.fromEnvironment();
+        Long pipelineRunId = databaseRun.map(DatabaseRun::id).orElse(null);
 
         // Enable CORS so the React frontend (served from a different port) can call these
         // endpoints — browsers block cross-origin requests unless the server allows them.
@@ -167,12 +170,56 @@ public class Server {
                 topicIds.add(id.asInt());
             }
 
+            String requestedSessionId = body.path("sessionId").asText(null);
+            String userId = body.path("userId").asText(null);
+            String sessionId = null;
+            Long pendingAssistantId = null;
+            List<Agent.ChatMessage> history = List.of();
+            if (chatDatabase.isPresent()) {
+                try {
+                    ChatDatabase database = chatDatabase.get();
+                    sessionId = requestedSessionId == null || requestedSessionId.isBlank()
+                            ? database.createSession(userId)
+                            : requestedSessionId;
+                    history = database.loadHistory(sessionId);
+                    pendingAssistantId = database.beginTurn(
+                            sessionId, query, topicIds, pipelineRunId);
+                } catch (ChatDatabase.SessionNotFoundException e) {
+                    jsonError(ctx, 404, e.getMessage());
+                    return;
+                } catch (ChatDatabase.SessionClosedException e) {
+                    jsonError(ctx, 409, e.getMessage());
+                    return;
+                } catch (Exception e) {
+                    System.out.println("Chat persistence failed; answering statelessly: "
+                            + e.getClass().getSimpleName());
+                    sessionId = null;
+                    pendingAssistantId = null;
+                    history = List.of();
+                }
+            }
+
             long started = System.currentTimeMillis();
-            Agent.Answer answer = agent.answer(query, topicIds);
+            Agent.Answer answer;
+            try {
+                answer = agent.answer(query, topicIds, history);
+            } catch (Exception e) {
+                if (pendingAssistantId != null) {
+                    try {
+                        chatDatabase.orElseThrow().failTurn(pendingAssistantId, e);
+                    } catch (Exception persistenceError) {
+                        System.out.println("Could not record failed chat attempt: "
+                                + persistenceError.getClass().getSimpleName());
+                    }
+                }
+                throw e;
+            }
             long elapsedMs = System.currentTimeMillis() - started;
             System.out.printf("/chat answered in %.2f s: \"%s\"%n", elapsedMs / 1000.0, query);
 
             ObjectNode response = JSON.createObjectNode();
+            if (sessionId == null) response.putNull("sessionId");
+            else response.put("sessionId", sessionId);
             response.put("answer", answer.text());
             response.put("elapsedMs", elapsedMs);
             ArrayNode sources = response.putArray("sources");
@@ -188,6 +235,19 @@ public class Server {
                 ObjectNode node = researchLog.addObject();
                 node.put("title", step.title());
                 node.put("detail", step.detail());
+            }
+            if (pendingAssistantId != null) {
+                try {
+                    List<Integer> matchedTopicIds = answer.sources().stream()
+                            .map(match -> match.topic().clusterId()).toList();
+                    chatDatabase.orElseThrow().completeTurn(
+                            pendingAssistantId, answer.text(), elapsedMs, matchedTopicIds,
+                            sources, researchLog);
+                } catch (Exception e) {
+                    System.out.println("Chat persistence failed after answering: "
+                            + e.getClass().getSimpleName());
+                    response.putNull("sessionId");
+                }
             }
             ctx.contentType("application/json").result(JSON.writeValueAsString(response));
         });
@@ -211,6 +271,12 @@ public class Server {
             return runCsvPath;
         }
         return DEFAULT_POSTS_CSV;
+    }
+
+    private static void jsonError(io.javalin.http.Context ctx, int status, String message) {
+        ObjectNode error = JSON.createObjectNode();
+        error.put("error", message);
+        ctx.status(status).contentType("application/json").result(error.toString());
     }
 
     private static boolean hasExplicitCsv(String[] args) {

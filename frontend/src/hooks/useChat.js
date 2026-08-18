@@ -10,6 +10,7 @@ let nextId = 0;
 export function useChat() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
 
   const send = useCallback(
     async (raw, topicIds = []) => {
@@ -19,7 +20,9 @@ export function useChat() {
       setMessages((prev) => [...prev, { id: nextId++, role: "user", text: question }]);
       setLoading(true);
       try {
-        const { answer, sources, researchLog } = await sendChat(question, topicIds);
+        const result = await sendChat(question, topicIds, sessionId);
+        const { answer, sources, researchLog } = result;
+        setSessionId(result.sessionId ?? null);
         setMessages((prev) => [
           ...prev,
           { id: nextId++, role: "agent", text: answer, sources, researchLog },
@@ -33,7 +36,7 @@ export function useChat() {
         setLoading(false);
       }
     },
-    [loading],
+    [loading, sessionId],
   );
 
   return { messages, loading, send };
