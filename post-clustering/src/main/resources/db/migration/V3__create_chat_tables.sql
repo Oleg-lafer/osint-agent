@@ -1,4 +1,4 @@
-CREATE TABLE AGENT_chat_sessions (
+CREATE TABLE IF NOT EXISTS AGENT_chat_sessions (
     id CHAR(36) NOT NULL,
     user_id VARCHAR(255) NULL,
     status ENUM('ACTIVE', 'CLOSED') NOT NULL DEFAULT 'ACTIVE',
@@ -8,13 +8,13 @@ CREATE TABLE AGENT_chat_sessions (
     PRIMARY KEY (id)
 ) ENGINE=InnoDB;
 
-CREATE TABLE AGENT_chat_messages (
+CREATE TABLE IF NOT EXISTS AGENT_chat_messages (
     id BIGINT NOT NULL AUTO_INCREMENT,
     session_id CHAR(36) NOT NULL,
     sequence_number INT NOT NULL,
     role ENUM('USER', 'ASSISTANT') NOT NULL,
     content TEXT NULL,
-    pipeline_run_id BIGINT NULL,
+    pipeline_run_id BIGINT UNSIGNED NULL,
     topic_ids JSON NULL,
     sources JSON NULL,
     research_log JSON NULL,
