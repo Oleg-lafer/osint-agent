@@ -21,7 +21,7 @@ entities.json
 
 # Source data — supplied by Ori, not ours to version. The enriched export carries a
 # 1536-float vector per post (~100 MB), and it holds real names and real posts.
-post-clustering/data/
+post-processing/data/
 
 # Node / React (Phase 2)
 node_modules/

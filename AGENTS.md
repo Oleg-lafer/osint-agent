@@ -10,7 +10,7 @@ overview, and serves a sourced chat interface.
 
 The repository contains:
 
-- `post-clustering/`: Java 17 backend, analysis pipeline, MySQL persistence, and Javalin API.
+- `post-processing/`: Java 17 backend, analysis pipeline, MySQL persistence, and Javalin API.
 - `frontend/`: React 19 + Vite chat interface.
 
 The online chat optionally persists conversational sessions and messages to MySQL. Persistence
@@ -258,7 +258,7 @@ live chat:
 & '.\PreProcessing pipeline.ps1' 1000 500
 ```
 
-Run backend commands from `post-clustering/`.
+Run backend commands from `post-processing/`.
 
 ```powershell
 # Offline tests
@@ -294,9 +294,9 @@ npm run build
 
 These files are intentionally ignored and should not be committed:
 
-- `post-clustering/.env`
+- `post-processing/.env`
 - `KEYS_AND_CREDENTIALS/`
-- `post-clustering/data/`
+- `post-processing/data/`
 - `embeddings-cache.json`
 - `summaries-cache.json`
 - `extractions-cache.json`

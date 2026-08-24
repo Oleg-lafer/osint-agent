@@ -1,6 +1,6 @@
 # Backend Working Guide
 
-This file applies to everything under `post-clustering/`. Follow the repository-root `AGENTS.md` as well; this guide adds backend-specific rules.
+This file applies to everything under `post-processing/`. Follow the repository-root `AGENTS.md` as well; this guide adds backend-specific rules.
 
 ## Scope and architecture
 
@@ -33,7 +33,7 @@ This file applies to everything under `post-clustering/`. Follow the repository-
 
 ## Commands and verification
 
-Run commands from `post-clustering/`:
+Run commands from `post-processing/`:
 
 ```powershell
 mvn test

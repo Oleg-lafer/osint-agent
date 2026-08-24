@@ -11,7 +11,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = $PSScriptRoot
-$backendDirectory = Join-Path $repositoryRoot 'post-clustering'
+$backendDirectory = Join-Path $repositoryRoot 'post-processing'
 $defaultDatabaseCredentials = Join-Path $repositoryRoot `
     'KEYS_AND_CREDENTIALS\DataBase_Credentials.txt'
 $openAiKey = Join-Path $repositoryRoot 'KEYS_AND_CREDENTIALS\OPEN_AI.txt'

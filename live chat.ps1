@@ -3,7 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = $PSScriptRoot
-$backendDir = Join-Path $repoRoot 'post-clustering'
+$backendDir = Join-Path $repoRoot 'post-processing'
 $frontendDir = Join-Path $repoRoot 'frontend'
 $logDir = Join-Path $repoRoot '.app-logs'
 $backendProcess = $null
