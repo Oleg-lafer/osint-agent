@@ -35,7 +35,7 @@ The entry point is `com.leadspotnic.App`.
 1. `PostQualificationLoader` reads recent rows for a watch list from MySQL when database
    credentials are configured and no CSV path is supplied. It maps `userId` to profile name,
    `content` to text, and `creation_time` to publish date. Defaults are watch list `1406` and
-   the last `14` days, capped to the newest `5` matching rows during development.
+   the last `14` days, capped to the newest `3000` matching rows by default.
    `--post-source=post-qualification` selects this input (the default). A separate execution with
    `--post-source=post-summary` uses `PostSummaryLoader`, mapping `summary` to text,
    `creation_time` to publish date, and using `post_summary` as the profile name. Its defaults are
@@ -132,9 +132,10 @@ Set `DB_CREDENTIALS_FILE` to a file containing `host`, `user`, and `password`. O
 - `POST_GROUP_ID` (pipeline: reusable logical post-group identifier; CLI `--post-group-id` wins)
 - `WATCH_LIST_ID` (source query; default `1406`)
 - `POST_LOOKBACK_DAYS` (source query; default `14`)
-- `POST_LIMIT` (maximum newest source rows; development default `5`)
+- `POST_LIMIT` (maximum newest `post_qualification` rows; default `3000`)
 - `POST_SUMMARY_LOOKBACK_DAYS` (`post_summary` lookback; default `60`)
 - `POST_SUMMARY_SEARCH_TERM` (`post_summary.summary` substring; default `airport`)
+- `POST_SUMMARY_LIMIT` (maximum newest matching `post_summary` rows; default `3000`)
 
 ### Online chat persistence
 
@@ -215,7 +216,10 @@ to process as its required argument. The launcher creates two independent runs: 
 live chat:
 
 ```powershell
-& '.\PreProcessing pipeline.ps1' 50
+& '.\PreProcessing pipeline.ps1'
+
+# Override the limits by hand: qualification limit first, summary limit second
+& '.\PreProcessing pipeline.ps1' 1000 500
 ```
 
 Run backend commands from `post-clustering/`.

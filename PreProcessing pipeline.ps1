@@ -1,8 +1,12 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory, Position = 0, HelpMessage = 'Number of newest database posts to process')]
+    [Parameter(Position = 0, HelpMessage = 'Maximum post_qualification rows to process')]
     [ValidateRange(1, 1000000)]
-    [int]$PostCount
+    [int]$QualificationPostCount = 3000,
+
+    [Parameter(Position = 1, HelpMessage = 'Maximum post_summary rows to process')]
+    [ValidateRange(1, 1000000)]
+    [int]$SummaryPostCount = 3000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,10 +49,11 @@ if ([int]$matches[1] -lt 17) {
     throw "Java 17 or newer is required. Installed version: $javaVersion"
 }
 
-$env:POST_LIMIT = [string]$PostCount
+$env:POST_LIMIT = [string]$QualificationPostCount
+$env:POST_SUMMARY_LIMIT = [string]$SummaryPostCount
 Write-Host "Starting two separate PreProcessing runs."
-Write-Host "Run 1: the $PostCount newest post_qualification rows."
-Write-Host 'Run 2: matching post_summary rows.'
+Write-Host "Run 1: up to $QualificationPostCount newest post_qualification rows."
+Write-Host "Run 2: up to $SummaryPostCount matching post_summary rows."
 Write-Host 'This invokes paid OpenAI embedding, extraction, and summarization calls.'
 
 Push-Location $backendDirectory

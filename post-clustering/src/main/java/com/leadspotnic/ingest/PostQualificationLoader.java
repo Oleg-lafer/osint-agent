@@ -16,7 +16,7 @@ import java.util.Set;
 public final class PostQualificationLoader {
     public static final int DEFAULT_WATCH_LIST_ID = 1406;
     public static final int DEFAULT_LOOKBACK_DAYS = 14;
-    public static final int DEFAULT_POST_LIMIT = 5;
+    public static final int DEFAULT_POST_LIMIT = 3000;
 
     private PostQualificationLoader() {}
 

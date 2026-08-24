@@ -100,6 +100,7 @@ public class App {
                 posts = PostSummaryLoader.load(sourceConfig.get(),
                         envInt("POST_SUMMARY_LOOKBACK_DAYS", PostSummaryLoader.DEFAULT_LOOKBACK_DAYS),
                         env("POST_SUMMARY_SEARCH_TERM", PostSummaryLoader.DEFAULT_SEARCH_TERM),
+                        envInt("POST_SUMMARY_LIMIT", PostSummaryLoader.DEFAULT_POST_LIMIT),
                         CsvLoader.Options.teamPolicy());
                 database.postsLoaded(posts, "post_summary");
             } else {
