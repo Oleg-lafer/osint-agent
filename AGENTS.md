@@ -1,10 +1,10 @@
-# Leadspotnic Repository Guide
+# Leadspotting Repository Guide
 
 This file is the authoritative working guide for this repository. Keep it current when architecture, commands, configuration, database names, or operational behavior changes.
 
 ## Product purpose
 
-Leadspotnic ingests social-media posts from CSV, discovers clusters without predefined labels,
+Leadspotting ingests social-media posts from CSV, discovers clusters without predefined labels,
 extracts structured entities and evidence, summarizes the clusters, builds a consolidated
 overview, and serves a sourced chat interface.
 
@@ -30,7 +30,7 @@ is best-effort: chat continues statelessly when the database is absent or unavai
 
 ## Pipeline and data flow
 
-The entry point is `com.leadspotnic.App`.
+The entry point is `com.leadspotting.App`.
 
 1. `PostQualificationLoader` reads recent rows for a watch list from MySQL when database
    credentials are configured and no CSV path is supplied. It maps `userId` to profile name,
@@ -175,7 +175,7 @@ from `AGENT_post_processing` so evidence cannot drift across preprocessing runs.
 
 ## OpenAI configuration
 
-All direct OpenAI configuration is centralized in `com.leadspotnic.llm.OpenAi`.
+All direct OpenAI configuration is centralized in `com.leadspotting.llm.OpenAi`.
 
 - Chat model: `gpt-4o-mini`
 - Embedding model: `text-embedding-3-small`
@@ -186,7 +186,7 @@ LLM and embedding calls can cost money. Unit tests must remain offline. Do not r
 
 ## Chat server
 
-Entry point: `com.leadspotnic.web.Server`; port `7070`.
+Entry point: `com.leadspotting.web.Server`; port `7070`.
 
 - `GET /status`: readiness, total post count, and cluster count.
 - `GET /runs`: completed summarized preprocessing runs available for chat selection.
@@ -248,7 +248,7 @@ mvn -q compile exec:java "-Dexec.args=C:\path\to\posts.csv --embed --extract --s
 mvn -q compile exec:java "-Dexec.args=--post-group-id=group-A --embed --extract --summarize"
 
 # Chat server
-mvn -q compile exec:java "-Dexec.mainClass=com.leadspotnic.web.Server"
+mvn -q compile exec:java "-Dexec.mainClass=com.leadspotting.web.Server"
 ```
 
 Run frontend commands from `frontend/`.

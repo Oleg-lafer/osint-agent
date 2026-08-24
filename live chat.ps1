@@ -122,7 +122,7 @@ try {
     }
     $env:DATABASE_ONLY = 'true'
     Write-Host 'Database-only mode enabled; all local data fallbacks are disabled.'
-    Stop-StaleAppOnPort 7070 'backend' 'com.leadspotnic.web.Server'
+    Stop-StaleAppOnPort 7070 'backend' 'com.leadspotting.web.Server'
     Stop-StaleAppOnPort 5173 'frontend' 'node_modules\vite'
     Require-AvailablePort 7070 'Backend'
     Require-AvailablePort 5173 'Frontend'
@@ -149,7 +149,7 @@ try {
 
     Write-Host 'Starting backend; output is being written to .app-logs/backend*.log...'
     $backendProcess = Start-Process -FilePath 'mvn.cmd' `
-        -ArgumentList '-q', 'compile', 'exec:java', '-Dexec.mainClass=com.leadspotnic.web.Server' `
+        -ArgumentList '-q', 'compile', 'exec:java', '-Dexec.mainClass=com.leadspotting.web.Server' `
         -WorkingDirectory $backendDir -NoNewWindow -PassThru `
         -RedirectStandardOutput $backendOut -RedirectStandardError $backendErr
 

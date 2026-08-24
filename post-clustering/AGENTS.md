@@ -5,10 +5,10 @@ This file applies to everything under `post-clustering/`. Follow the repository-
 ## Scope and architecture
 
 - Java 17 Maven project.
-- `com.leadspotnic.App` runs the preprocessing pipeline.
-- `com.leadspotnic.web.Server` runs the Javalin chat API on port `7070`.
+- `com.leadspotting.App` runs the preprocessing pipeline.
+- `com.leadspotting.web.Server` runs the Javalin chat API on port `7070`.
 - Keep responsibilities within the existing packages: `ingest`, `cluster`, `summarize`, `agent`, `web`, `llm`, `model`, and `persistence`.
-- `com.leadspotnic.llm.OpenAi` is the only location for direct OpenAI configuration.
+- `com.leadspotting.llm.OpenAi` is the only location for direct OpenAI configuration.
 
 ## Behavioral invariants
 
@@ -36,7 +36,7 @@ Run commands from `post-clustering/`:
 ```powershell
 mvn test
 mvn -q compile exec:java
-mvn -q compile exec:java "-Dexec.mainClass=com.leadspotnic.web.Server"
+mvn -q compile exec:java "-Dexec.mainClass=com.leadspotting.web.Server"
 ```
 
 For ordinary backend changes, run `mvn test`. Also run the relevant local, database-disabled path when changing ingestion, pipeline orchestration, caching, or server loading.

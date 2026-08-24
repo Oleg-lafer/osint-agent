@@ -1,4 +1,4 @@
-# Running Leadspotnic
+# Running Leadspotting
 
 Run these commands from the repository root in PowerShell.
 
