@@ -1,6 +1,7 @@
 package com.leadspotting.pipeline.E_entity_extraction;
 
 import com.leadspotting.pipeline.F_cluster_summarization.Summarizer;
+import com.leadspotting.pipeline.H_result_storage.StorageMode;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -52,7 +53,16 @@ public class Extractor {
     }
 
     private final ObjectMapper json = new ObjectMapper();
+    private final boolean localCacheEnabled;
     private Analyst analyst;
+
+    public Extractor() {
+        this(StorageMode.fromEnvironment().writesLocal());
+    }
+
+    public Extractor(boolean localCacheEnabled) {
+        this.localCacheEnabled = localCacheEnabled;
+    }
 
     /**
      * Extracts every cluster's entities. Cached so re-runs cost nothing, and the cache is saved
@@ -145,6 +155,9 @@ public class Extractor {
     }
 
     private Map<String, Extraction> loadCache() throws IOException {
+        if (!localCacheEnabled) {
+            return new HashMap<>();
+        }
         Map<String, Extraction> cache = new HashMap<>();
         if (!Files.exists(CACHE_FILE)) {
             return cache;
@@ -166,6 +179,9 @@ public class Extractor {
     }
 
     private void saveCache(Map<String, Extraction> cache) throws IOException {
+        if (!localCacheEnabled) {
+            return;
+        }
         ObjectNode root = json.createObjectNode();
         root.put("model", OpenAi.CHAT_MODEL);
         ObjectNode entries = root.putObject("extractions");

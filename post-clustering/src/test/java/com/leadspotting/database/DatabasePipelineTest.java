@@ -1,5 +1,7 @@
 package com.leadspotting.database;
 
+import com.leadspotting.llm.PipelineUsage;
+import com.leadspotting.pipeline.H_result_storage.StorageMode;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -7,9 +9,18 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DatabasePipelineTest {
+
+    @Test
+    void explicitLocalModeDoesNotStartDatabaseStorage() {
+        try (DatabasePipeline pipeline = DatabasePipeline.start(
+                null, new String[0], new PipelineUsage(), StorageMode.LOCAL)) {
+            assertFalse(pipeline.enabled());
+        }
+    }
 
     @Test
     void commandLinePostGroupOverridesEnvironment() {

@@ -5,14 +5,14 @@ import com.leadspotting.llm.PipelineUsage;
 import com.leadspotting.model.ClusterExtraction;
 import com.leadspotting.model.ClusterSummary;
 import com.leadspotting.model.Post;
+import com.leadspotting.pipeline.H_result_storage.StorageMode;
 
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
-/** Best-effort DB mirror of the existing in-memory/file pipeline. */
+/** Database output for pipeline modes that require durable MySQL persistence. */
 public final class DatabasePipeline implements AutoCloseable {
 
     private AgentDatabase database;
@@ -27,19 +27,27 @@ public final class DatabasePipeline implements AutoCloseable {
     private DatabasePipeline() {}
 
     public static DatabasePipeline start(String csvPath, String[] args) {
-        return start(csvPath, args, new PipelineUsage());
+        return start(csvPath, args, new PipelineUsage(), StorageMode.fromEnvironment());
     }
 
     public static DatabasePipeline start(String csvPath, String[] args, PipelineUsage usage) {
+        return start(csvPath, args, usage, StorageMode.fromEnvironment());
+    }
+
+    public static DatabasePipeline start(String csvPath, String[] args, PipelineUsage usage,
+                                         StorageMode storageMode) {
         DatabasePipeline pipeline = new DatabasePipeline();
         pipeline.usage = usage;
         pipeline.startedAtMs = System.currentTimeMillis();
+        if (!storageMode.writesDatabase()) {
+            return pipeline;
+        }
         try {
-            Optional<DatabaseConfig> config = DatabaseConfig.fromEnvironment();
-            if (config.isEmpty()) {
-                return pipeline;
-            }
-            pipeline.database = new AgentDatabase(config.get());
+            DatabaseConfig config = DatabaseConfig.fromEnvironment().orElseThrow(() ->
+                    new IllegalStateException("STORAGE_MODE="
+                            + storageMode.name().toLowerCase()
+                            + " requires DB_CREDENTIALS_FILE"));
+            pipeline.database = new AgentDatabase(config);
             pipeline.sourceTable = csvPath == null ? "post_qualification" : "CSV";
             String postGroupId = postGroupId(args, System.getenv());
             pipeline.runId = pipeline.database.createRun(
@@ -47,7 +55,8 @@ public final class DatabasePipeline implements AutoCloseable {
             System.out.println("Database: started pipeline run " + pipeline.runId
                     + " for post group " + postGroupId);
         } catch (Exception e) {
-            pipeline.disable("could not start persistence", e);
+            pipeline.closeQuietly();
+            throw new IllegalStateException("Could not start required database storage", e);
         }
         return pipeline;
     }
@@ -145,22 +154,9 @@ public final class DatabasePipeline implements AutoCloseable {
         try {
             work.run();
         } catch (Exception e) {
-            disable(description, e);
+            fail(e);
+            throw new IllegalStateException("Database storage failed: " + description, e);
         }
-    }
-
-    private void disable(String description, Exception error) {
-        System.out.println("Database warning: " + description + "; continuing locally: "
-                + error.getMessage());
-        if (database != null && runId != 0) {
-            try {
-                database.failRun(runId, error);
-            } catch (Exception ignored) {
-                // The original failure may be a lost connection, so this is best effort only.
-            }
-        }
-        closeQuietly();
-        database = null;
     }
 
     private void closeQuietly() {

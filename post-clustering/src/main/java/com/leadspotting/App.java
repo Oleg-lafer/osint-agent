@@ -27,6 +27,7 @@ import com.leadspotting.database.DatabaseConfig;
 import com.leadspotting.pipeline.G_dataset_overview.Consolidator;
 import com.leadspotting.pipeline.E_entity_extraction.Extractor;
 import com.leadspotting.pipeline.H_result_storage.KnowledgeBase;
+import com.leadspotting.pipeline.H_result_storage.StorageMode;
 import com.leadspotting.pipeline.F_cluster_summarization.Summarizer;
 
 /**
@@ -56,11 +57,13 @@ public class App {
 
     public static void main(String[] args) throws Exception {
         String csvPath = csvPath(args);
+        StorageMode storageMode = StorageMode.fromEnvironment();
+        System.out.println("Storage mode: " + storageMode.name().toLowerCase());
         PipelineUsage usage = new PipelineUsage();
         OpenAi.activateUsage(usage);
-        try (DatabasePipeline database = DatabasePipeline.start(csvPath, args, usage)) {
+        try (DatabasePipeline database = DatabasePipeline.start(csvPath, args, usage, storageMode)) {
             try {
-                run(args, csvPath, database);
+                run(args, csvPath, database, storageMode);
             } catch (Exception e) {
                 database.fail(e);
                 throw e;
@@ -70,7 +73,8 @@ public class App {
         }
     }
 
-    private static void run(String[] args, String csvPath, DatabasePipeline database)
+    private static void run(String[] args, String csvPath, DatabasePipeline database,
+                            StorageMode storageMode)
             throws Exception {
         List<String> flags = Arrays.asList(args);
         boolean embed = flags.contains("--embed");
@@ -126,7 +130,7 @@ public class App {
 
         t = System.currentTimeMillis();
         OpenAi.stage("embedding");
-        if (!new Embedder().embedAll(posts, embed)) {
+        if (!new Embedder(storageMode.writesLocal()).embedAll(posts, embed)) {
             database.fail(new IllegalStateException("Not every accepted post has an embedding"));
             return;
         }
@@ -156,8 +160,11 @@ public class App {
         if (extract) {
             t = System.currentTimeMillis();
             OpenAi.stage("extraction");
-            Map<Integer, ClusterExtraction> extractions = new Extractor().extractAll(byCluster);
-            KnowledgeBase.saveEntities(extractions.values());
+            Map<Integer, ClusterExtraction> extractions =
+                    new Extractor(storageMode.writesLocal()).extractAll(byCluster);
+            if (storageMode.writesLocal()) {
+                KnowledgeBase.saveEntities(extractions.values());
+            }
             database.extractionsReady(extractions);
             long extractionMs = System.currentTimeMillis() - t;
             timings.put("Entity extraction (Task 2)", extractionMs);
@@ -167,18 +174,21 @@ public class App {
         if (summarize) {
             t = System.currentTimeMillis();
             OpenAi.stage("summarization");
-            Map<Integer, ClusterSummary> summaries = new Summarizer().summarizeAll(byCluster);
+            Map<Integer, ClusterSummary> summaries =
+                    new Summarizer(storageMode.writesLocal()).summarizeAll(byCluster);
             database.summariesReady(summaries);
             long summarizationMs = System.currentTimeMillis() - t;
             timings.put("Cluster summaries (Step 2)", summarizationMs);
             OpenAi.recordDuration("summarization", summarizationMs);
             printSummaries(byCluster, summaries);
 
-            // Step 3: merge the per-cluster summaries into one consolidated summary and
-            // write it to disk for Step 4 to read.
+            // Step 3: merge the per-cluster summaries into one consolidated summary, then
+            // persist it to the destinations selected by STORAGE_MODE.
             t = System.currentTimeMillis();
             ConsolidatedSummary kb = new Consolidator().consolidate(byCluster, summaries);
-            KnowledgeBase.save(kb);
+            if (storageMode.writesLocal()) {
+                KnowledgeBase.save(kb);
+            }
             database.complete(kb.overview());
             timings.put("Consolidation (Step 3)", System.currentTimeMillis() - t);
             System.out.println("\n=== Overview ===\n" + kb.overview());

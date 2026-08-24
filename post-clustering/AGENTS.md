@@ -13,8 +13,9 @@ This file applies to everything under `post-clustering/`. Follow the repository-
 
 ## Behavioral invariants
 
-- Database integration is optional and additive. Without database configuration, local CSV input, caches, and JSON outputs must continue to work.
-- Database failures must degrade gracefully unless strict database-only server startup was explicitly selected.
+- `STORAGE_MODE` accepts `database`, `local`, or `both` and defaults to `database`.
+- `database` mode creates no local pipeline caches or JSON outputs and must fail on missing or failed
+  database persistence. Local behavior requires explicit `STORAGE_MODE=local` or `both`.
 - Do not modify company source-post tables. Pipeline writes belong only in the `AGENT_*` tables documented by the root guide.
 - Preserve stable content-hash post IDs and evidence mappings.
 - Do not transform analytical model objects solely for database persistence; local and database JSON must remain structurally equivalent.
@@ -40,7 +41,8 @@ mvn -q compile exec:java
 mvn -q compile exec:java "-Dexec.mainClass=com.leadspotting.web.Server"
 ```
 
-For ordinary backend changes, run `mvn test`. Also run the relevant local, database-disabled path when changing ingestion, pipeline orchestration, caching, or server loading.
+For ordinary backend changes, run `mvn test`. Also run the relevant explicit
+`STORAGE_MODE=local` path when changing ingestion, pipeline orchestration, caching, or server loading.
 
 The RDS integration test writes and then deletes synthetic data. Run it only when the task explicitly calls for database integration testing and valid test configuration is present:
 

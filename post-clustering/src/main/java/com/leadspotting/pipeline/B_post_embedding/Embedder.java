@@ -1,6 +1,7 @@
 package com.leadspotting.pipeline.B_post_embedding;
 
 import com.leadspotting.pipeline.A_database_input.CsvLoader;
+import com.leadspotting.pipeline.H_result_storage.StorageMode;
 
 import com.leadspotting.model.Post;
 import com.leadspotting.llm.OpenAi;
@@ -48,10 +49,19 @@ public class Embedder {
             .connectTimeout(Duration.ofSeconds(20))
             .build();
     private final ObjectMapper json = new ObjectMapper();
+    private final boolean localCacheEnabled;
+
+    public Embedder() {
+        this(StorageMode.fromEnvironment().writesLocal());
+    }
+
+    public Embedder(boolean localCacheEnabled) {
+        this.localCacheEnabled = localCacheEnabled;
+    }
 
     /**
      * Fills in post.setEmbedding(...) for every post: from the CSV if it supplied vectors,
-     * then from the on-disk cache, and only then from the API.
+     * then from the on-disk cache when local storage is enabled, and only then from the API.
      *
      * @param allowFetch whether calling the API is permitted. False is the normal case â€”
      *                   the enriched CSV is supposed to bring the vectors â€” so a run that
@@ -112,7 +122,9 @@ public class Embedder {
         }
 
         saveCache(cache);
-        System.out.println("Embeddings: cached to " + CACHE_FILE.toAbsolutePath());
+        if (localCacheEnabled) {
+            System.out.println("Embeddings: cached to " + CACHE_FILE.toAbsolutePath());
+        }
         return true;
     }
 
@@ -215,6 +227,9 @@ public class Embedder {
     }
 
     private Map<Long, float[]> loadCache() throws IOException {
+        if (!localCacheEnabled) {
+            return new HashMap<>();
+        }
         Map<Long, float[]> cache = new HashMap<>();
         if (!Files.exists(CACHE_FILE)) {
             return cache;
@@ -241,6 +256,9 @@ public class Embedder {
     }
 
     private void saveCache(Map<Long, float[]> cache) throws IOException {
+        if (!localCacheEnabled) {
+            return;
+        }
         ObjectNode root = json.createObjectNode();
         root.put("model", OpenAi.EMBED_MODEL);
         ObjectNode vectors = root.putObject("vectors");

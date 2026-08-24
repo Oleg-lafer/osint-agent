@@ -11,7 +11,9 @@ Process a chosen number of the newest MySQL posts. For example, process 50 posts
 ```
 
 Replace `50` with the required post count. This command uses paid OpenAI calls and writes
-pipeline results, including clusters, to MySQL. Run it only when preprocessing is wanted.
+pipeline results, including clusters, to MySQL. It defaults `STORAGE_MODE` to `database`, so it
+does not create local pipeline JSON files or caches unless `local` or `both` is explicitly set.
+Run it only when preprocessing is wanted.
 
 ## 2. Live chat
 

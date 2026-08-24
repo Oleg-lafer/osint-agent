@@ -51,10 +51,14 @@ if ([int]$matches[1] -lt 17) {
 
 $env:POST_LIMIT = [string]$QualificationPostCount
 $env:POST_SUMMARY_LIMIT = [string]$SummaryPostCount
+if (-not $env:STORAGE_MODE) {
+    $env:STORAGE_MODE = 'database'
+}
 Write-Host "Starting two separate PreProcessing runs."
 Write-Host "Run 1: up to $QualificationPostCount newest post_qualification rows."
 Write-Host "Run 2: up to $SummaryPostCount matching post_summary rows."
 Write-Host 'This invokes paid OpenAI embedding, extraction, and summarization calls.'
+Write-Host "Storage mode: $($env:STORAGE_MODE)"
 
 Push-Location $backendDirectory
 try {

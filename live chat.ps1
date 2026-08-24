@@ -120,6 +120,7 @@ try {
     if ($env:POSTS_CSV) {
         throw 'POSTS_CSV must be unset: this launcher enforces database-only mode.'
     }
+    $env:STORAGE_MODE = 'database'
     $env:DATABASE_ONLY = 'true'
     Write-Host 'Database-only mode enabled; all local data fallbacks are disabled.'
     Stop-StaleAppOnPort 7070 'backend' 'com.leadspotting.web.Server'

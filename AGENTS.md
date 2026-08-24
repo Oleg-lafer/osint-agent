@@ -20,9 +20,16 @@ is best-effort: chat continues statelessly when the database is absent or unavai
 
 - `post_qualification` is the default source when `DB_CREDENTIALS_FILE` is configured and no
   explicit CSV path is supplied. CSV remains available as an explicit input and offline fallback.
-- The local pipeline is the behavioral baseline. Database integration must remain additive and must not change ingestion, embeddings, graph construction, clustering, extraction, summarization, or consolidation logic.
-- Local caches and JSON outputs must continue to be written when database persistence is enabled.
-- MySQL persistence is optional and best-effort. Missing configuration or a database failure must log a warning and allow local processing to continue.
+- `STORAGE_MODE` controls durable pipeline output and server loading. Valid values are `database`,
+  `local`, and `both`; the default is `database`.
+- `database` mode creates no local pipeline caches or JSON outputs and requires working MySQL
+  configuration. A missing configuration or persistence failure must fail the run rather than
+  completing without durable output.
+- `local` mode must be selected explicitly and uses local caches and JSON without pipeline database
+  writes. `both` must also be selected explicitly and writes structurally equivalent local and
+  database outputs.
+- Storage selection must not change ingestion, embeddings, graph construction, clustering,
+  extraction, summarization, or consolidation logic.
 - Never commit API keys, database credentials, source datasets, generated caches, or generated knowledge-base files.
 - Do not modify company source-post tables. Offline processing persists only to the three pipeline
   `AGENT_*` tables described below; online chat may use the two chat tables.
@@ -91,7 +98,9 @@ The canonical equivalence is:
 | `ClusterExtraction` | `entities.json` and `extractions-cache.json` | `AGENT_clusters.entities_and_evidence` |
 | Consolidated overview | `knowledge-base.json` | `AGENT_pipeline_runs.dataset_overview` |
 
-For a single run, the canonical local objects and their database JSON should be structurally identical. Compare parsed JSON, not pretty-print whitespace or raw file size alone.
+For a run executed with `STORAGE_MODE=both`, the canonical local objects and their database JSON
+should be structurally identical. Compare parsed JSON, not pretty-print whitespace or raw file
+size alone.
 
 ## MySQL persistence
 
@@ -146,6 +155,7 @@ Deleting a pipeline run cascades to its clusters and processing rows. Deleting a
 
 Set `DB_CREDENTIALS_FILE` to a file containing `host`, `user`, and `password`. Optional overrides:
 
+- `STORAGE_MODE` (`database`, `local`, or `both`; default `database`)
 - `DB_NAME` (default `leadspot_main`)
 - `DB_PORT` (default `3306`)
 - `AGENT_PIPELINE_RUN_ID` (server: select a specific completed summarized run)
@@ -196,6 +206,10 @@ All direct OpenAI configuration is centralized in `com.leadspotting.llm.OpenAi`.
 - Key: raw key text in the gitignored `KEYS_AND_CREDENTIALS/OPEN_AI.txt` file
 
 LLM and embedding calls can cost money. Unit tests must remain offline. Do not run full uncached LLM workflows unless the task calls for it.
+Because `database` mode does not read or write local caches, separate preprocessing runs do not
+reuse `embeddings-cache.json`, `summaries-cache.json`, or `extractions-cache.json`; interrupted or
+repeated work may therefore incur additional API calls until equivalent database-backed cache
+reuse is implemented.
 
 ## Chat server
 
@@ -215,7 +229,9 @@ all author/date fields needed for drill-down. CSV resolution order is:
 3. CSV path recorded in the selected database run
 4. The bundled `src/main/resources/posts.csv`
 
-When database embedding coverage does not cover every CSV post, the server uses the local embedding cache rather than mixing vector sources.
+In `database` mode, incomplete database embedding coverage is a startup error and local files are
+never used. In `both` mode, the server may use the local embedding cache rather than mixing vector
+sources. In `local` mode, the server reads only local pipeline outputs.
 
 ## Commands
 
@@ -248,7 +264,8 @@ Run backend commands from `post-clustering/`.
 # Offline tests
 mvn test
 
-# Use the bundled CSV and existing compatible embedding cache
+# Explicit local mode: use the bundled CSV and existing compatible embedding cache
+$env:STORAGE_MODE='local'
 mvn -q compile exec:java
 
 # Full bundled pipeline; invokes OpenAI for uncached work
@@ -289,14 +306,16 @@ These files are intentionally ignored and should not be committed:
 - frontend `node_modules/` and `dist/`
 
 Caches include a model identifier. Do not silently reuse data from a different embedding or chat model.
+The database credentials file and OpenAI key remain local configuration inputs in every applicable
+mode; `database` mode suppresses generated pipeline files, not required credential files.
 
 ## Verification expectations
 
 For ordinary backend changes:
 
 1. Run `mvn test`.
-2. Confirm local execution still works without `DB_CREDENTIALS_FILE`.
-3. For persistence changes, test both database-disabled fallback and the opt-in RDS integration test.
+2. Confirm explicit `STORAGE_MODE=local` execution still works without `DB_CREDENTIALS_FILE`.
+3. For storage changes, test explicit local mode and the opt-in RDS integration test where authorized.
 4. For schema or mapping changes, verify row counts, JSON validity, cluster-to-post counts, foreign keys, embedding dimensions, and evidence post IDs.
 5. For frontend changes, run `npm run lint` and `npm run build`.
 

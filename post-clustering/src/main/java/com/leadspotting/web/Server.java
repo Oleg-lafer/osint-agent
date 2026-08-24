@@ -4,6 +4,7 @@ import com.leadspotting.model.ClusterExtraction;
 import com.leadspotting.model.ConsolidatedSummary;
 import com.leadspotting.pipeline.B_post_embedding.Embedder;
 import com.leadspotting.pipeline.H_result_storage.KnowledgeBase;
+import com.leadspotting.pipeline.H_result_storage.StorageMode;
 import com.leadspotting.chat_agent.PostIndex;
 import com.leadspotting.chat_agent.PostStore;
 import com.leadspotting.chat_agent.ClusterIndex;
@@ -43,10 +44,18 @@ public class Server {
     private static final String DEFAULT_POSTS_CSV = "src/main/resources/posts.csv";
 
     public static void main(String[] args) throws Exception {
-        boolean databaseOnly = envBoolean("DATABASE_ONLY");
-        Optional<DatabaseRun> databaseRun = databaseOnly
-                ? Optional.of(AgentDatabase.loadRequiredRun())
-                : AgentDatabase.tryLoadPreferredRun();
+        StorageMode storageMode = StorageMode.fromEnvironment();
+        if (envBoolean("DATABASE_ONLY") && storageMode.writesLocal()) {
+            throw new IllegalStateException(
+                    "DATABASE_ONLY=true conflicts with STORAGE_MODE="
+                            + storageMode.name().toLowerCase());
+        }
+        boolean databaseOnly = storageMode == StorageMode.DATABASE;
+        Optional<DatabaseRun> databaseRun = switch (storageMode) {
+            case DATABASE -> Optional.of(AgentDatabase.loadRequiredRun());
+            case BOTH -> AgentDatabase.tryLoadPreferredRun();
+            case LOCAL -> Optional.empty();
+        };
 
         if (databaseOnly && hasExplicitCsv(args)) {
             throw new IllegalStateException(
@@ -65,7 +74,7 @@ public class Server {
         ConsolidatedSummary kb = databaseRun
                 .map(DatabaseRun::knowledgeBase)
                 .orElseGet(Server::loadLocalKnowledgeBase);
-        ClusterIndex index = new ClusterIndex(kb, new Embedder());
+        ClusterIndex index = new ClusterIndex(kb, new Embedder(storageMode.writesLocal()));
 
         // Task 3: also load the drill-down data — the entities (which carry post ids) and the
         // full posts (id -> text), so the agent can reach individual posts. The CSV is the same
@@ -73,7 +82,9 @@ public class Server {
         List<ClusterExtraction> entities = databaseRun
                 .map(DatabaseRun::extractions)
                 .orElseGet(Server::loadLocalEntities);
-        Optional<DatabaseConfig> sourceConfig = DatabaseConfig.fromEnvironment();
+        Optional<DatabaseConfig> sourceConfig = storageMode.writesDatabase()
+                ? DatabaseConfig.fromEnvironment()
+                : Optional.empty();
         PostStore posts;
         if (databaseRun.isPresent() && sourceConfig.isPresent()) {
             try (AgentDatabase database = new AgentDatabase(sourceConfig.orElseThrow())) {
@@ -99,7 +110,7 @@ public class Server {
                     ? "Database: applied all post embeddings for the selected run"
                     : "Database: embedding coverage is incomplete; using the local cache");
         }
-        PostIndex postIndex = new PostIndex(posts, new Embedder());   // vectors from cache, offline
+        PostIndex postIndex = new PostIndex(posts, new Embedder(storageMode.writesLocal()));
         System.out.printf("Loaded %d entities' clusters and %d posts for drill-down.%n",
                 entities.size(), posts.size());
         if (databaseOnly) {
@@ -109,7 +120,9 @@ public class Server {
         }
 
         Agent agent = new Agent(kb, index, entities, posts, postIndex);
-        Optional<ChatDatabase> chatDatabase = ChatDatabase.fromEnvironment();
+        Optional<ChatDatabase> chatDatabase = storageMode.writesDatabase()
+                ? ChatDatabase.fromEnvironment()
+                : Optional.empty();
         long initialRunId = databaseRun.map(DatabaseRun::id).orElse(-1L);
         ChatRunService runs = new ChatRunService(sourceConfig,
                 new ChatRunService.RunContext(initialRunId, kb, index, agent));

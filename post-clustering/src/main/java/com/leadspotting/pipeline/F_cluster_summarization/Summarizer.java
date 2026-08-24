@@ -1,6 +1,7 @@
 package com.leadspotting.pipeline.F_cluster_summarization;
 
 import com.leadspotting.pipeline.B_post_embedding.Embedder;
+import com.leadspotting.pipeline.H_result_storage.StorageMode;
 
 import com.leadspotting.model.Post;
 import com.leadspotting.model.ClusterSummary;
@@ -61,9 +62,18 @@ public class Summarizer {
     }
 
     private final ObjectMapper json = new ObjectMapper();
+    private final boolean localCacheEnabled;
 
     // Built lazily: a fully-cached run needs neither the API key nor a network call.
     private ClusterAnalyst analyst;
+
+    public Summarizer() {
+        this(StorageMode.fromEnvironment().writesLocal());
+    }
+
+    public Summarizer(boolean localCacheEnabled) {
+        this.localCacheEnabled = localCacheEnabled;
+    }
 
     /**
      * Summarises every cluster, from cache where possible and from the model otherwise.
@@ -132,6 +142,9 @@ public class Summarizer {
     }
 
     private Map<String, ClusterSummary> loadCache() throws IOException {
+        if (!localCacheEnabled) {
+            return new HashMap<>();
+        }
         Map<String, ClusterSummary> cache = new HashMap<>();
         if (!Files.exists(CACHE_FILE)) {
             return cache;
@@ -156,6 +169,9 @@ public class Summarizer {
     }
 
     private void saveCache(Map<String, ClusterSummary> cache) throws IOException {
+        if (!localCacheEnabled) {
+            return;
+        }
         ObjectNode root = json.createObjectNode();
         root.put("model", OpenAi.CHAT_MODEL);
         ObjectNode summaries = root.putObject("summaries");
