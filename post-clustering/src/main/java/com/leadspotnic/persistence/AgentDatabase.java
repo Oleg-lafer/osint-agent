@@ -229,15 +229,16 @@ public final class AgentDatabase implements AutoCloseable {
     }
 
     public void completeRun(long runId, String overview) throws SQLException {
-        completeRun(runId, overview, new PipelineUsage().snapshot(0));
+        completeRun(runId, overview, new PipelineUsage().snapshot(0), 0);
     }
 
-    public void completeRun(long runId, String overview, PipelineUsage.Snapshot usage) throws SQLException {
+    public void completeRun(long runId, String overview, PipelineUsage.Snapshot usage,
+                            int processedPostCount) throws SQLException {
         String sql = """
                 UPDATE AGENT_pipeline_runs
                 SET status = 'COMPLETED', dataset_overview = ?, completed_at = ?, duration_ms = ?,
                     input_tokens = ?, output_tokens = ?, total_tokens = ?, estimated_cost_usd = ?,
-                    usage_details = ?
+                    usage_details = ?, processed_post_count = ?
                 WHERE id = ?
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -249,7 +250,8 @@ public final class AgentDatabase implements AutoCloseable {
             statement.setLong(6, usage.totalTokens());
             statement.setBigDecimal(7, usage.estimatedCostUsd());
             statement.setString(8, usage.usageDetailsJson());
-            statement.setLong(9, runId);
+            statement.setInt(9, processedPostCount);
+            statement.setLong(10, runId);
             statement.executeUpdate();
         }
     }

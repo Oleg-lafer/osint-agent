@@ -22,6 +22,7 @@ public final class DatabasePipeline implements AutoCloseable {
     private String sourceTable = "CSV";
     private PipelineUsage usage;
     private long startedAtMs;
+    private int processedPostCount;
 
     private DatabasePipeline() {}
 
@@ -56,6 +57,7 @@ public final class DatabasePipeline implements AutoCloseable {
     }
 
     public void postsLoaded(List<Post> posts, String sourceTable) {
+        processedPostCount += posts.size();
         execute("could not save accepted posts", () ->
                 postRows.putAll(database.insertPosts(runId, posts, sourceTable)));
     }
@@ -91,7 +93,7 @@ public final class DatabasePipeline implements AutoCloseable {
 
     public void complete(String overview) {
         execute("could not complete pipeline run", () -> database.completeRun(runId, overview,
-                usage.snapshot(System.currentTimeMillis() - startedAtMs)));
+                usage.snapshot(System.currentTimeMillis() - startedAtMs), processedPostCount));
         if (database != null) {
             System.out.println("Database: completed pipeline run " + runId);
         }

@@ -97,7 +97,8 @@ consolidated overview, timestamps, usage metrics, and any failure message.
 
 Expected lifecycle: `RUNNING` to `COMPLETED` or `FAILED`.
 
-Completed runs store `duration_ms`, aggregate input/output/total token counts,
+Completed runs store `processed_post_count` (accepted posts that entered processing), `duration_ms`,
+aggregate input/output/total token counts,
 `estimated_cost_usd`, and `usage_details`. The JSON details retain per-stage/per-model usage and
 the pricing basis used by the run. Cached work costs zero tokens; estimates use the configured
 execution-time prices for `gpt-4o-mini` and `text-embedding-3-small`.
