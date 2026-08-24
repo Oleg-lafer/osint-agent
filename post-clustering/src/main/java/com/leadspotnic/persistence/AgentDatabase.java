@@ -8,6 +8,7 @@ import com.leadspotnic.model.ClusterExtraction;
 import com.leadspotnic.model.ClusterSummary;
 import com.leadspotnic.model.ConsolidatedSummary;
 import com.leadspotnic.model.Post;
+import com.leadspotnic.llm.PipelineUsage;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -228,15 +229,27 @@ public final class AgentDatabase implements AutoCloseable {
     }
 
     public void completeRun(long runId, String overview) throws SQLException {
+        completeRun(runId, overview, new PipelineUsage().snapshot(0));
+    }
+
+    public void completeRun(long runId, String overview, PipelineUsage.Snapshot usage) throws SQLException {
         String sql = """
                 UPDATE AGENT_pipeline_runs
-                SET status = 'COMPLETED', dataset_overview = ?, completed_at = ?
+                SET status = 'COMPLETED', dataset_overview = ?, completed_at = ?, duration_ms = ?,
+                    input_tokens = ?, output_tokens = ?, total_tokens = ?, estimated_cost_usd = ?,
+                    usage_details = ?
                 WHERE id = ?
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, overview);
             statement.setTimestamp(2, Timestamp.from(Instant.now()));
-            statement.setLong(3, runId);
+            statement.setLong(3, usage.durationMs());
+            statement.setLong(4, usage.inputTokens());
+            statement.setLong(5, usage.outputTokens());
+            statement.setLong(6, usage.totalTokens());
+            statement.setBigDecimal(7, usage.estimatedCostUsd());
+            statement.setString(8, usage.usageDetailsJson());
+            statement.setLong(9, runId);
             statement.executeUpdate();
         }
     }

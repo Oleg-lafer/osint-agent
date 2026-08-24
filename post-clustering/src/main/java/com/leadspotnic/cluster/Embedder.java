@@ -170,6 +170,9 @@ public class Embedder {
         }
 
         JsonNode root = json.readTree(response.body());
+        JsonNode usage = root.path("usage");
+        OpenAi.recordEmbeddingUsage(usage.path("prompt_tokens").asLong(),
+                usage.path("total_tokens").asLong());
 
         // OpenAi can answer 200 OK with an error object instead of data â€” an oversized
         // input, a rate limit, no credit. Without echoing the body, that surfaces as the

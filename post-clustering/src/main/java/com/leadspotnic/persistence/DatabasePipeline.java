@@ -1,6 +1,7 @@
 package com.leadspotnic.persistence;
 
 import com.leadspotnic.llm.OpenAi;
+import com.leadspotnic.llm.PipelineUsage;
 import com.leadspotnic.model.ClusterExtraction;
 import com.leadspotnic.model.ClusterSummary;
 import com.leadspotnic.model.Post;
@@ -19,11 +20,19 @@ public final class DatabasePipeline implements AutoCloseable {
     private Map<Post, Long> postRows = new IdentityHashMap<>();
     private Map<Integer, Long> clusterRows = Map.of();
     private String sourceTable = "CSV";
+    private PipelineUsage usage;
+    private long startedAtMs;
 
     private DatabasePipeline() {}
 
     public static DatabasePipeline start(String csvPath, String[] args) {
+        return start(csvPath, args, new PipelineUsage());
+    }
+
+    public static DatabasePipeline start(String csvPath, String[] args, PipelineUsage usage) {
         DatabasePipeline pipeline = new DatabasePipeline();
+        pipeline.usage = usage;
+        pipeline.startedAtMs = System.currentTimeMillis();
         try {
             Optional<DatabaseConfig> config = DatabaseConfig.fromEnvironment();
             if (config.isEmpty()) {
@@ -81,7 +90,8 @@ public final class DatabasePipeline implements AutoCloseable {
     }
 
     public void complete(String overview) {
-        execute("could not complete pipeline run", () -> database.completeRun(runId, overview));
+        execute("could not complete pipeline run", () -> database.completeRun(runId, overview,
+                usage.snapshot(System.currentTimeMillis() - startedAtMs)));
         if (database != null) {
             System.out.println("Database: completed pipeline run " + runId);
         }

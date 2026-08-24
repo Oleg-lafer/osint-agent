@@ -16,6 +16,8 @@ import com.leadspotnic.cluster.SimilarityGraph;
 import com.leadspotnic.ingest.CsvLoader;
 import com.leadspotnic.ingest.PostQualificationLoader;
 import com.leadspotnic.ingest.PostSummaryLoader;
+import com.leadspotnic.llm.OpenAi;
+import com.leadspotnic.llm.PipelineUsage;
 import com.leadspotnic.model.ClusterExtraction;
 import com.leadspotnic.model.ClusterSummary;
 import com.leadspotnic.model.ConsolidatedSummary;
@@ -54,13 +56,17 @@ public class App {
 
     public static void main(String[] args) throws Exception {
         String csvPath = csvPath(args);
-        try (DatabasePipeline database = DatabasePipeline.start(csvPath, args)) {
+        PipelineUsage usage = new PipelineUsage();
+        OpenAi.activateUsage(usage);
+        try (DatabasePipeline database = DatabasePipeline.start(csvPath, args, usage)) {
             try {
                 run(args, csvPath, database);
             } catch (Exception e) {
                 database.fail(e);
                 throw e;
             }
+        } finally {
+            OpenAi.clearUsage();
         }
     }
 
@@ -119,12 +125,15 @@ public class App {
                 System.currentTimeMillis() - t);
 
         t = System.currentTimeMillis();
+        OpenAi.stage("embedding");
         if (!new Embedder().embedAll(posts, embed)) {
             database.fail(new IllegalStateException("Not every accepted post has an embedding"));
             return;
         }
         database.embeddingsReady();
-        timings.put("Embeddings", System.currentTimeMillis() - t);
+        long embeddingMs = System.currentTimeMillis() - t;
+        timings.put("Embeddings", embeddingMs);
+        OpenAi.recordDuration("embedding", embeddingMs);
 
         t = System.currentTimeMillis();
         SimilarityGraph graph = SimilarityGraph.build(posts, k, minSimilarity);
@@ -146,17 +155,23 @@ public class App {
         // Task 2: entity extraction (what/who/where + post ids) for each cluster.
         if (extract) {
             t = System.currentTimeMillis();
+            OpenAi.stage("extraction");
             Map<Integer, ClusterExtraction> extractions = new Extractor().extractAll(byCluster);
             KnowledgeBase.saveEntities(extractions.values());
             database.extractionsReady(extractions);
-            timings.put("Entity extraction (Task 2)", System.currentTimeMillis() - t);
+            long extractionMs = System.currentTimeMillis() - t;
+            timings.put("Entity extraction (Task 2)", extractionMs);
+            OpenAi.recordDuration("extraction", extractionMs);
         }
 
         if (summarize) {
             t = System.currentTimeMillis();
+            OpenAi.stage("summarization");
             Map<Integer, ClusterSummary> summaries = new Summarizer().summarizeAll(byCluster);
             database.summariesReady(summaries);
-            timings.put("Cluster summaries (Step 2)", System.currentTimeMillis() - t);
+            long summarizationMs = System.currentTimeMillis() - t;
+            timings.put("Cluster summaries (Step 2)", summarizationMs);
+            OpenAi.recordDuration("summarization", summarizationMs);
             printSummaries(byCluster, summaries);
 
             // Step 3: merge the per-cluster summaries into one consolidated summary and

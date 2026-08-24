@@ -86,7 +86,8 @@ Database: MySQL on AWS RDS. Default schema: `leadspot_main`.
 
 ### `AGENT_pipeline_runs`
 
-One row per pipeline execution. Stores status, embedding model, CLI parameters and CSV path, consolidated overview, timestamps, and any failure message.
+One row per pipeline execution. Stores status, embedding model, CLI parameters and CSV path,
+consolidated overview, timestamps, usage metrics, and any failure message.
 
 - `id`: unique preprocessing execution identity (the `PreProcessing_run_id` referenced by clusters).
 - `post_group_id`: logical post-set identity. Separate executions over the same post set reuse this
@@ -95,6 +96,11 @@ One row per pipeline execution. Stores status, embedding model, CLI parameters a
   Rows created before this field was introduced remain null because their grouping is unknown.
 
 Expected lifecycle: `RUNNING` to `COMPLETED` or `FAILED`.
+
+Completed runs store `duration_ms`, aggregate input/output/total token counts,
+`estimated_cost_usd`, and `usage_details`. The JSON details retain per-stage/per-model usage and
+the pricing basis used by the run. Cached work costs zero tokens; estimates use the configured
+execution-time prices for `gpt-4o-mini` and `text-embedding-3-small`.
 
 ### `AGENT_clusters`
 
