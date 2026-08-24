@@ -1,13 +1,13 @@
 package com.leadspotting.web;
 
-import com.leadspotting.agent.Agent;
-import com.leadspotting.agent.PostIndex;
-import com.leadspotting.agent.PostStore;
-import com.leadspotting.agent.ClusterIndex;
-import com.leadspotting.cluster.Embedder;
-import com.leadspotting.persistence.AgentDatabase;
-import com.leadspotting.persistence.DatabaseConfig;
-import com.leadspotting.persistence.DatabaseRun;
+import com.leadspotting.chat_agent.Agent;
+import com.leadspotting.chat_agent.PostIndex;
+import com.leadspotting.chat_agent.PostStore;
+import com.leadspotting.chat_agent.ClusterIndex;
+import com.leadspotting.pipeline.B_post_embedding.Embedder;
+import com.leadspotting.database.AgentDatabase;
+import com.leadspotting.database.DatabaseConfig;
+import com.leadspotting.database.DatabaseRun;
 
 import java.util.List;
 import java.util.Map;

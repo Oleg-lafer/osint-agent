@@ -7,7 +7,8 @@ This file applies to everything under `post-clustering/`. Follow the repository-
 - Java 17 Maven project.
 - `com.leadspotting.App` runs the preprocessing pipeline.
 - `com.leadspotting.web.Server` runs the Javalin chat API on port `7070`.
-- Keep responsibilities within the existing packages: `ingest`, `cluster`, `summarize`, `agent`, `web`, `llm`, `model`, and `persistence`.
+- Keep offline processing responsibilities in the ordered `pipeline` packages `A_database_input` through `H_result_storage`.
+- Keep shared responsibilities in `model`, `database`, `llm`, `chat_agent`, `web`, and `util`.
 - `com.leadspotting.llm.OpenAi` is the only location for direct OpenAI configuration.
 
 ## Behavioral invariants
@@ -22,7 +23,7 @@ This file applies to everything under `post-clustering/`. Follow the repository-
 
 ## Development rules
 
-- Keep SQL and persistence lifecycle logic in `persistence`; do not place database calls inside clustering or summarization algorithms.
+- Keep SQL and persistence lifecycle logic in `database`; do not place database calls inside analytical pipeline stages.
 - Add persistence around completed stage outputs, not within the stages that produce them.
 - Keep JSON models backward-compatible unless a coordinated migration is part of the task.
 - Treat changes to clustering defaults, prompts, models, or cache compatibility as product-quality changes requiring targeted validation.

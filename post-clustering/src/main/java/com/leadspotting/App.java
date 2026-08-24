@@ -8,26 +8,26 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.leadspotting.cluster.Clusterer;
-import com.leadspotting.cluster.ClusterSplitter;
-import com.leadspotting.cluster.Clusters;
-import com.leadspotting.cluster.Embedder;
-import com.leadspotting.cluster.SimilarityGraph;
-import com.leadspotting.ingest.CsvLoader;
-import com.leadspotting.ingest.PostQualificationLoader;
-import com.leadspotting.ingest.PostSummaryLoader;
+import com.leadspotting.pipeline.D_post_clustering.Clusterer;
+import com.leadspotting.pipeline.D_post_clustering.ClusterSplitter;
+import com.leadspotting.pipeline.D_post_clustering.Clusters;
+import com.leadspotting.pipeline.B_post_embedding.Embedder;
+import com.leadspotting.pipeline.C_similarity_graph.SimilarityGraph;
+import com.leadspotting.pipeline.A_database_input.CsvLoader;
+import com.leadspotting.pipeline.A_database_input.PostQualificationLoader;
+import com.leadspotting.pipeline.A_database_input.PostSummaryLoader;
 import com.leadspotting.llm.OpenAi;
 import com.leadspotting.llm.PipelineUsage;
 import com.leadspotting.model.ClusterExtraction;
 import com.leadspotting.model.ClusterSummary;
 import com.leadspotting.model.ConsolidatedSummary;
 import com.leadspotting.model.Post;
-import com.leadspotting.persistence.DatabasePipeline;
-import com.leadspotting.persistence.DatabaseConfig;
-import com.leadspotting.summarize.Consolidator;
-import com.leadspotting.summarize.Extractor;
-import com.leadspotting.summarize.KnowledgeBase;
-import com.leadspotting.summarize.Summarizer;
+import com.leadspotting.database.DatabasePipeline;
+import com.leadspotting.database.DatabaseConfig;
+import com.leadspotting.pipeline.G_dataset_overview.Consolidator;
+import com.leadspotting.pipeline.E_entity_extraction.Extractor;
+import com.leadspotting.pipeline.H_result_storage.KnowledgeBase;
+import com.leadspotting.pipeline.F_cluster_summarization.Summarizer;
 
 /**
  * Entry point for the Step 1 pipeline:

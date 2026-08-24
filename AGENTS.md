@@ -32,6 +32,19 @@ is best-effort: chat continues statelessly when the database is absent or unavai
 
 The entry point is `com.leadspotting.App`.
 
+Pipeline implementation packages follow execution order under `com.leadspotting.pipeline`:
+
+- `A_database_input`
+- `B_post_embedding`
+- `C_similarity_graph`
+- `D_post_clustering`
+- `E_entity_extraction`
+- `F_cluster_summarization`
+- `G_dataset_overview`
+- `H_result_storage`
+
+Shared responsibilities remain in `model`, `database`, `llm`, `chat_agent`, `web`, and `util`.
+
 1. `PostQualificationLoader` reads recent rows for a watch list from MySQL when database
    credentials are configured and no CSV path is supplied. It maps `userId` to profile name,
    `content` to text, and `creation_time` to publish date. Defaults are watch list `1406` and
@@ -298,8 +311,8 @@ When evaluating persistence quality, preserve an independent local baseline. Exa
 
 ## Change guidance
 
-- Prefer small changes within the existing package boundaries: `model`, `ingest`, `cluster`, `summarize`, `agent`, `web`, `llm`, and `persistence`.
-- Keep persistence concerns inside `persistence`; do not embed SQL into analytical stages.
+- Prefer small changes within the ordered `pipeline` stage packages and the shared `model`, `database`, `llm`, `chat_agent`, `web`, and `util` packages.
+- Keep persistence concerns inside `database`; do not embed SQL into analytical stages.
 - Add database calls around completed stage outputs, never inside the algorithms that produce them.
 - Keep JSON models backward-compatible unless a coordinated local-file and database migration is explicitly requested.
 - When renaming schema objects, update application SQL, tests, operational documentation, foreign-key expectations, and live schema together; verify existing data before and after.

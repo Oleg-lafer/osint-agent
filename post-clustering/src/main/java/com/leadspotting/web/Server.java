@@ -2,16 +2,16 @@ package com.leadspotting.web;
 
 import com.leadspotting.model.ClusterExtraction;
 import com.leadspotting.model.ConsolidatedSummary;
-import com.leadspotting.cluster.Embedder;
-import com.leadspotting.summarize.KnowledgeBase;
-import com.leadspotting.agent.PostIndex;
-import com.leadspotting.agent.PostStore;
-import com.leadspotting.agent.ClusterIndex;
-import com.leadspotting.agent.Agent;
-import com.leadspotting.persistence.AgentDatabase;
-import com.leadspotting.persistence.DatabaseRun;
-import com.leadspotting.persistence.DatabaseConfig;
-import com.leadspotting.persistence.ChatDatabase;
+import com.leadspotting.pipeline.B_post_embedding.Embedder;
+import com.leadspotting.pipeline.H_result_storage.KnowledgeBase;
+import com.leadspotting.chat_agent.PostIndex;
+import com.leadspotting.chat_agent.PostStore;
+import com.leadspotting.chat_agent.ClusterIndex;
+import com.leadspotting.chat_agent.Agent;
+import com.leadspotting.database.AgentDatabase;
+import com.leadspotting.database.DatabaseRun;
+import com.leadspotting.database.DatabaseConfig;
+import com.leadspotting.database.ChatDatabase;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
