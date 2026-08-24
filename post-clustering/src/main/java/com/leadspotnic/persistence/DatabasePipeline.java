@@ -43,8 +43,12 @@ public final class DatabasePipeline implements AutoCloseable {
     }
 
     public void postsLoaded(List<Post> posts) {
+        postsLoaded(posts, sourceTable);
+    }
+
+    public void postsLoaded(List<Post> posts, String sourceTable) {
         execute("could not save accepted posts", () ->
-                postRows = database.insertPosts(runId, posts, sourceTable));
+                postRows.putAll(database.insertPosts(runId, posts, sourceTable)));
     }
 
     public void embeddingsReady() {

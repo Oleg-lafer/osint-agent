@@ -46,17 +46,23 @@ if ([int]$matches[1] -lt 17) {
 }
 
 $env:POST_LIMIT = [string]$PostCount
-Write-Host "Starting the PreProcessing pipeline for the $PostCount newest database posts."
+Write-Host "Starting two separate PreProcessing runs."
+Write-Host "Run 1: the $PostCount newest post_qualification rows."
+Write-Host 'Run 2: matching post_summary rows.'
 Write-Host 'This invokes paid OpenAI embedding, extraction, and summarization calls.'
 
 Push-Location $backendDirectory
 try {
-    & mvn -q compile exec:java '-Dexec.args=--embed --extract --summarize'
-    if ($LASTEXITCODE -ne 0) {
-        throw "PreProcessing pipeline failed with exit code $LASTEXITCODE."
+    foreach ($source in @('post-qualification', 'post-summary')) {
+        Write-Host "Running source: $source"
+        $pipelineArguments = "--post-source=$source --embed --extract --summarize"
+        & mvn -q compile exec:java "-Dexec.args=$pipelineArguments"
+        if ($LASTEXITCODE -ne 0) {
+            throw "PreProcessing pipeline for $source failed with exit code $LASTEXITCODE."
+        }
     }
 } finally {
     Pop-Location
 }
 
-Write-Host 'PreProcessing pipeline completed successfully.' -ForegroundColor Green
+Write-Host 'Both separate PreProcessing runs completed successfully.' -ForegroundColor Green

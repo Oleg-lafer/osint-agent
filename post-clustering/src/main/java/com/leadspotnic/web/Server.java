@@ -12,7 +12,6 @@ import com.leadspotnic.persistence.AgentDatabase;
 import com.leadspotnic.persistence.DatabaseRun;
 import com.leadspotnic.persistence.DatabaseConfig;
 import com.leadspotnic.persistence.ChatDatabase;
-import com.leadspotnic.ingest.PostQualificationLoader;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -75,23 +74,17 @@ public class Server {
                 .map(DatabaseRun::extractions)
                 .orElseGet(Server::loadLocalEntities);
         Optional<DatabaseConfig> sourceConfig = DatabaseConfig.fromEnvironment();
-        boolean useDatabasePosts = !hasExplicitCsv(args) && sourceConfig.isPresent()
-                && databaseRun.map(DatabaseRun::csvPath).orElse(null) == null;
-        if (databaseOnly && !useDatabasePosts) {
-            throw new IllegalStateException(
-                    "Database-only mode could not select post_qualification as the post source");
-        }
         PostStore posts;
-        if (useDatabasePosts) {
-            int watchListId = envInt("WATCH_LIST_ID", PostQualificationLoader.DEFAULT_WATCH_LIST_ID);
-            int lookbackDays = envInt("POST_LOOKBACK_DAYS", PostQualificationLoader.DEFAULT_LOOKBACK_DAYS);
-            int postLimit = envInt("POST_LIMIT", PostQualificationLoader.DEFAULT_POST_LIMIT);
-            System.out.printf("Loading posts from post_qualification "
-                            + "(watch list %d, last %d days, newest %d rows)%n",
-                    watchListId, lookbackDays, postLimit);
-            posts = PostStore.fromDatabase(
-                    sourceConfig.orElseThrow(), watchListId, lookbackDays, postLimit);
+        if (databaseRun.isPresent() && sourceConfig.isPresent()) {
+            try (AgentDatabase database = new AgentDatabase(sourceConfig.orElseThrow())) {
+                posts = new PostStore(database.loadPostsForRun(databaseRun.orElseThrow().id()));
+            }
+            System.out.println("Loading exact persisted posts for pipeline run "
+                    + databaseRun.orElseThrow().id());
         } else {
+            if (databaseOnly) {
+                throw new IllegalStateException("Database-only mode could not load persisted run posts");
+            }
             System.out.println("Loading posts from: " + csvPath);
             posts = PostStore.fromCsv(Path.of(csvPath));
         }

@@ -15,6 +15,7 @@ import com.leadspotnic.cluster.Embedder;
 import com.leadspotnic.cluster.SimilarityGraph;
 import com.leadspotnic.ingest.CsvLoader;
 import com.leadspotnic.ingest.PostQualificationLoader;
+import com.leadspotnic.ingest.PostSummaryLoader;
 import com.leadspotnic.model.ClusterExtraction;
 import com.leadspotnic.model.ClusterSummary;
 import com.leadspotnic.model.ConsolidatedSummary;
@@ -46,6 +47,8 @@ import com.leadspotnic.summarize.Summarizer;
  *   --max-cluster=100      cap cluster size; bigger clusters are split into sub-clusters
  *   --split-resolution=1.0 how hard to split an oversized cluster (lower = fewer sub-clusters)
  *   --post-group-id=group-A logical post group shared by otherwise independent DB runs
+ *   --post-source=post-qualification load only post_qualification (default)
+ *   --post-source=post-summary       load only matching post_summary rows
  */
 public class App {
 
@@ -87,16 +90,30 @@ public class App {
 
         t = System.currentTimeMillis();
         var sourceConfig = DatabaseConfig.fromEnvironment();
-        List<Post> posts = csvPath != null
-                ? CsvLoader.loadFromFile(Path.of(csvPath), CsvLoader.Options.teamPolicy())
-                : sourceConfig.isPresent()
-                    ? PostQualificationLoader.load(sourceConfig.get(),
+        String postSource = postSource(args);
+        List<Post> posts;
+        if (csvPath != null) {
+            posts = CsvLoader.loadFromFile(Path.of(csvPath), CsvLoader.Options.teamPolicy());
+            database.postsLoaded(posts, "CSV");
+        } else if (sourceConfig.isPresent()) {
+            if (postSource.equals("post-summary")) {
+                posts = PostSummaryLoader.load(sourceConfig.get(),
+                        envInt("POST_SUMMARY_LOOKBACK_DAYS", PostSummaryLoader.DEFAULT_LOOKBACK_DAYS),
+                        env("POST_SUMMARY_SEARCH_TERM", PostSummaryLoader.DEFAULT_SEARCH_TERM),
+                        CsvLoader.Options.teamPolicy());
+                database.postsLoaded(posts, "post_summary");
+            } else {
+                posts = PostQualificationLoader.load(sourceConfig.get(),
                         envInt("WATCH_LIST_ID", PostQualificationLoader.DEFAULT_WATCH_LIST_ID),
                         envInt("POST_LOOKBACK_DAYS", PostQualificationLoader.DEFAULT_LOOKBACK_DAYS),
                         envInt("POST_LIMIT", PostQualificationLoader.DEFAULT_POST_LIMIT),
-                        CsvLoader.Options.teamPolicy())
-                    : CsvLoader.loadFromClasspath("/posts.csv", CsvLoader.Options.teamPolicy());
-        database.postsLoaded(posts);
+                        CsvLoader.Options.teamPolicy());
+                database.postsLoaded(posts, "post_qualification");
+            }
+        } else {
+            posts = CsvLoader.loadFromClasspath("/posts.csv", CsvLoader.Options.teamPolicy());
+            database.postsLoaded(posts, "CSV");
+        }
         timings.put(csvPath == null && sourceConfig.isPresent() ? "Load database posts" : "Load CSV",
                 System.currentTimeMillis() - t);
 
@@ -226,6 +243,24 @@ public class App {
         return flags.stream().filter(flag -> flag.startsWith(prefix))
                 .findFirst().map(flag -> Double.parseDouble(flag.substring(prefix.length())))
                 .orElse(fallback);
+    }
+
+    private static String env(String name, String defaultValue) {
+        String value = System.getenv(name);
+        return value == null || value.isBlank() ? defaultValue : value;
+    }
+
+    static String postSource(String[] args) {
+        String source = Arrays.stream(args)
+                .filter(arg -> arg.startsWith("--post-source="))
+                .map(arg -> arg.substring("--post-source=".length()).trim().toLowerCase())
+                .findFirst()
+                .orElse("post-qualification");
+        if (!source.equals("post-qualification") && !source.equals("post-summary")) {
+            throw new IllegalArgumentException(
+                    "--post-source must be post-qualification or post-summary");
+        }
+        return source;
     }
 
     private static int envInt(String name, int fallback) {

@@ -36,6 +36,10 @@ The entry point is `com.leadspotnic.App`.
    credentials are configured and no CSV path is supplied. It maps `userId` to profile name,
    `content` to text, and `creation_time` to publish date. Defaults are watch list `1406` and
    the last `14` days, capped to the newest `5` matching rows during development.
+   `--post-source=post-qualification` selects this input (the default). A separate execution with
+   `--post-source=post-summary` uses `PostSummaryLoader`, mapping `summary` to text,
+   `creation_time` to publish date, and using `post_summary` as the profile name. Its defaults are
+   the last `60` days and search term `airport`. The sources are never combined in one run.
    Otherwise, `CsvLoader` reads a supplied CSV or the bundled
    `src/main/resources/posts.csv`.
    - Required columns: `profile_name`, `text`, `publish_date`.
@@ -108,7 +112,8 @@ The pair `(PreProcessing_run_id, cluster_number)` is unique.
 
 One row per accepted CSV occurrence per run.
 
-- Database-source rows use `source_table = 'post_qualification'`; CSV rows use `source_table = 'CSV'`.
+- Database-source rows use their originating table (`post_qualification` or `post_summary`) in
+  `source_table`; CSV rows use `source_table = 'CSV'`.
 - `source_post_id` is the content-hash ID; repeated identical occurrences receive `#2`, `#3`, and so on to satisfy uniqueness without changing `Post` identity.
 - `normalized_text` contains the exact text processed by the current pipeline despite its historical column name.
 - `embedding` contains the vector as JSON.
@@ -128,6 +133,8 @@ Set `DB_CREDENTIALS_FILE` to a file containing `host`, `user`, and `password`. O
 - `WATCH_LIST_ID` (source query; default `1406`)
 - `POST_LOOKBACK_DAYS` (source query; default `14`)
 - `POST_LIMIT` (maximum newest source rows; development default `5`)
+- `POST_SUMMARY_LOOKBACK_DAYS` (`post_summary` lookback; default `60`)
+- `POST_SUMMARY_SEARCH_TERM` (`post_summary.summary` substring; default `airport`)
 
 ### Online chat persistence
 
@@ -202,8 +209,10 @@ the selected run or its source data is unavailable or incomplete:
 & '.\live chat.ps1'
 ```
 
-Run the database-backed PreProcessing pipeline separately and pass the number of newest posts
-to process as its required argument. This invokes paid OpenAI calls and does not start live chat:
+Run the database-backed PreProcessing pipeline and pass the number of newest qualification posts
+to process as its required argument. The launcher creates two independent runs: one from
+`post_qualification` and one from `post_summary`. Each invokes paid OpenAI calls and neither starts
+live chat:
 
 ```powershell
 & '.\PreProcessing pipeline.ps1' 50
