@@ -1,10 +1,7 @@
-# Leadspotting Repository Guide
-
-This file is the authoritative working guide for this repository. Keep it current when architecture, commands, configuration, database names, or operational behavior changes.
 
 ## Product purpose
 
-Leadspotting ingests social-media posts from CSV, discovers clusters without predefined labels,
+OSINT-Agent ingests social-media posts from CSV, discovers clusters without predefined labels,
 extracts structured entities and evidence, summarizes the clusters, builds a consolidated
 overview, and serves a sourced chat interface.
 
