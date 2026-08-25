@@ -39,3 +39,13 @@
   margin: 0;
   white-space: pre-wrap;
 }
+
+.heading {
+  margin: 12px 0 4px;
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
+.heading:first-child {
+  margin-top: 0;
+}
